@@ -6,6 +6,8 @@
  */
 import Anthropic from '@anthropic-ai/sdk'
 import type { AutoParseableOutputFormat } from '@anthropic-ai/sdk/lib/parser'
+import { MockCuratorTransport } from './mock-curator'
+import { ReplayTransport } from './replay'
 
 export const MODEL = 'claude-opus-5-5'
 export const MAX_TOKENS = 16000
@@ -65,9 +67,17 @@ export class AnthropicTransport implements LlmTransport {
 
 let transport: LlmTransport | undefined
 
+/**
+ * 默认真实 API。开发 / 演示可设 `LLM_TRANSPORT=mock`（离线桩）或 `replay`（录制回放）；生产不要设。
+ */
 export function getTransport(): LlmTransport {
-  transport ??= new AnthropicTransport()
-  return transport
+  if (!transport) {
+    const kind = process.env.LLM_TRANSPORT
+    if (kind === 'mock') transport = new MockCuratorTransport()
+    else if (kind === 'replay') transport = new ReplayTransport()
+    else transport = new AnthropicTransport()
+  }
+  return transport!
 }
 
 export function setTransport(t: LlmTransport | undefined): void {
@@ -76,7 +86,12 @@ export function setTransport(t: LlmTransport | undefined): void {
 
 /** 是否可以调用 LLM：显式注入了 transport（测试 / 回放），或配置了 API 凭据。 */
 export function llmConfigured(): boolean {
-  return Boolean(transport) || Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN)
+  return (
+    Boolean(transport) ||
+    process.env.LLM_TRANSPORT === 'mock' ||
+    process.env.LLM_TRANSPORT === 'replay' ||
+    Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN)
+  )
 }
 
 /** 1 小时缓存断点（7.2）。 */

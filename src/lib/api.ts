@@ -51,6 +51,8 @@ export function route<C>(fn: Handler<C>): Handler<C> {
       return await fn(req, ctx)
     } catch (err) {
       if (err instanceof ApiError) return apiError(err.status, err.code, err.message)
+      if (err && typeof err === 'object' && (err as { userFacing?: boolean }).userFacing)
+        return apiError(422, 'unprocessable', (err as Error).message)
       if (err instanceof ZodError)
         return apiError(400, 'invalid_input', err.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; '))
       // next/navigation 的 redirect / notFound 通过 throw 实现，要继续抛

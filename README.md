@@ -93,3 +93,13 @@ docker compose up -d --build   # web + worker 两个容器，SQLite 在 ./data
   preferred_start 只在当天所有场次仍放得下时采用。
 - 单部模式的 festival.subject 用「片名 (年份)」，标题用片库里的本地化片名（没有中文译名时是原名 / 英文名）。
 - 日本片的纯汉字原名在无 zh-CN 译名时也作为中文标题（之前会被丢弃）。
+
+### M4
+
+- `/plan`：本周 / 下周、「涂能看的时间 / 涂没空的时间」两种模式、7 天 × 30 分钟格（08:00–24:00，鼠标与触屏都能拖涂）、
+  几天 / 几部；生成前先把这一周的涂抹存为该周可用时间，也可「存为每周模板」。没有任何设置时用默认模板（工作日晚上 + 周末下午）。
+- 生成：API 先做同步可行性预检（不可行直接 422 告诉用户），再入队 `generate_festival`；同一 request 被重试时复用已生成的影展（幂等）。
+- 换一个：当前影展置 dismissed，`avoid.subjects` / `avoid.tmdb_ids` 累积，同一 request 最多 5 次；`avoid.kinds` 保持空（7.8）。
+- 开发 / 演示开关 `LLM_TRANSPORT=mock|replay`（默认真实 API）与 `scripts/seed-fixtures.ts`（把某个 fixture 画像的观影记录复制给
+  dev@local），配合 `TMDB_FIXTURE_CATALOG=data/fixtures/catalog.json` 可在没有任何 key 的情况下走通整个 UI。
+- API 错误码：业务上不可行（UserFacingError）统一 422 `unprocessable`。
