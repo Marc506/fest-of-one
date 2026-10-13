@@ -50,3 +50,21 @@ export function closeDb(): void {
   holder.sqlite = undefined
   holder.path = undefined
 }
+
+/**
+ * 同步事务（better-sqlite3）。已在事务中时直接执行（不嵌套 BEGIN），
+ * 让 repo 函数既能单独调用、也能被外层批量写入包起来。
+ */
+export function tx<T>(fn: () => T): T {
+  const sqlite = getSqlite()
+  if (sqlite.inTransaction) return fn()
+  sqlite.exec('BEGIN IMMEDIATE')
+  try {
+    const r = fn()
+    sqlite.exec('COMMIT')
+    return r
+  } catch (err) {
+    sqlite.exec('ROLLBACK')
+    throw err
+  }
+}

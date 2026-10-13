@@ -147,7 +147,14 @@ export const films = sqliteTable('films', {
   ...timestamps,
 })
 
-export type MatchCandidate = { tmdb_id: number; title: string; year: number | null; score: number }
+export type MatchCandidate = {
+  tmdb_id: number
+  title: string
+  year: number | null
+  score: number
+  original_title?: string
+  vote_count?: number
+}
 
 export const filmAliases = sqliteTable(
   'film_aliases',
