@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+@theme {
+  --font-serif: "Noto Serif SC", "Songti SC", "Source Han Serif SC", "STSong", Georgia, serif;
+  --font-sans: "Inter", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  --color-paper: #f6f1e7;
+  --color-ink: #1d1a16;
+  --color-muted: #6f675c;
+  --color-rule: #d8cfbf;
+  --color-accent: #9a2b1f;
+}
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --color-paper: #15130f;
+    --color-ink: #ece5d8;
+    --color-muted: #a29886;
+    --color-rule: #39332a;
+    --color-accent: #e0735f;
+  }
+}

@@ -18,3 +18,7 @@ coverage/
 .DS_Store
 .idea/
 .vscode/
+
+# Next / TS
+next-env.d.ts
+*.tsbuildinfo

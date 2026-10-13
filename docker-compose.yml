@@ -1,0 +1,23 @@
+services:
+  web:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: file:/app/data/fest.db
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+
+  worker:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: file:/app/data/fest.db
+    command: ["pnpm", "worker"]
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - web
+    restart: unless-stopped
