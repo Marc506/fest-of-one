@@ -8,17 +8,18 @@ import { MAX_REROLLS } from '@/festival/service'
 import { requirePageUser } from '@/lib/session'
 import { Poster } from '../../_components/Poster'
 import { Badge } from '../../_components/ui'
+import { KIND_LABEL } from '../../_components/labels'
 import { Suspense } from 'react'
 import { buildEvent } from '@/calendar/event'
 import { googleConfigured } from '@/calendar/google'
 import { googleTemplateLink, webcalUrls } from '@/calendar/links'
 import { env } from '@/lib/env'
 import { CalendarActions } from './CalendarActions'
+import { FeedbackToggle } from './FeedbackToggle'
 import { RerollButton } from './RerollButton'
 
 export const dynamic = 'force-dynamic'
 
-const KIND_LABEL = { director: '导演回顾', country: '国别 · 时代', actor: '演员回顾', motif: '专题', single: '本周一部' } as const
 const ROLE_LABEL = { opening: '开幕', centerpiece: '中场', closing: '闭幕', regular: '' } as const
 const WEEKDAY = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
@@ -130,6 +131,7 @@ export default async function FestivalPage({ params }: { params: Promise<{ id: s
                           {[m.titleZh ? m.titleEn : null, m.directors.map((d) => d.name).join(' & '), m.countries.join(' / '), `${m.runtimeMin} 分钟`].filter(Boolean).join(' · ')}
                         </p>
                         <p className="max-w-2xl text-sm leading-7">{s.programNoteMd}</p>
+                        {f.status !== 'dismissed' && <FeedbackToggle festivalId={f.id} screeningId={s.id} value={s.feedback} />}
                         {f.status !== 'dismissed' && gLink(s) && (
                           <a href={gLink(s)!} target="_blank" rel="noreferrer" className="text-xs text-muted underline hover:text-ink">
                             只加这一场到 Google 日历 ↗
@@ -150,8 +152,11 @@ export default async function FestivalPage({ params }: { params: Promise<{ id: s
               {unscheduled.map((s) => {
                 const m = films.get(s.tmdbId)!
                 return (
-                  <li key={s.id}>
-                    {s.position}. {filmTitle(m)}（{m.runtimeMin} 分钟）— {s.unscheduledReason}
+                  <li key={s.id} className="flex flex-wrap items-center gap-3">
+                    <span>
+                      {s.position}. {filmTitle(m)}（{m.runtimeMin} 分钟）— {s.unscheduledReason}
+                    </span>
+                    {f.status !== 'dismissed' && <FeedbackToggle festivalId={f.id} screeningId={s.id} value={s.feedback} />}
                   </li>
                 )
               })}

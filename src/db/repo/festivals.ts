@@ -60,7 +60,7 @@ export type HistoryItem = {
   title: string
   status: Festival['status']
   createdAt: string
-  films: { tmdbId: number; title: string }[]
+  films: { tmdbId: number; title: string; feedback: Screening['feedback'] }[]
 }
 
 /** 近 N 周的影展（不含 dismissed），按周倒序。weekStart < beforeWeek。 */
@@ -91,7 +91,7 @@ export function recentProgrammes(userId: string, opts: { sinceWeek: string; befo
     .all()
   if (!rows.length) return []
   const scr = db
-    .select({ festivalId: screenings.festivalId, tmdbId: screenings.tmdbId, position: screenings.position, title: films.titleEn })
+    .select({ festivalId: screenings.festivalId, tmdbId: screenings.tmdbId, position: screenings.position, title: films.titleEn, feedback: screenings.feedback })
     .from(screenings)
     .innerJoin(films, eq(films.tmdbId, screenings.tmdbId))
     .where(inArray(screenings.festivalId, rows.map((r) => r.id)))
@@ -105,7 +105,7 @@ export function recentProgrammes(userId: string, opts: { sinceWeek: string; befo
     title: r.title,
     status: r.status,
     createdAt: r.createdAt,
-    films: scr.filter((s) => s.festivalId === r.id).map((s) => ({ tmdbId: s.tmdbId, title: s.title })),
+    films: scr.filter((s) => s.festivalId === r.id).map((s) => ({ tmdbId: s.tmdbId, title: s.title, feedback: s.feedback })),
   }))
 }
 
@@ -163,4 +163,24 @@ export function latestPublishedFestival(userId: string): Festival | undefined {
     .where(and(eq(festivals.userId, userId), isNotNull(festivals.id), ne(festivals.status, 'dismissed')))
     .orderBy(desc(festivals.createdAt))
     .get()
+}
+
+/** /history：影展列表 + 各自的反馈情况。 */
+export function listFestivalHistory(userId: string, opts: { includeDismissed: boolean }) {
+  const db = getDb()
+  const rows = db
+    .select({ f: festivals, week: festivalRequests.weekStart })
+    .from(festivals)
+    .innerJoin(festivalRequests, eq(festivalRequests.id, festivals.requestId))
+    .where(and(eq(festivals.userId, userId), ...(opts.includeDismissed ? [] : [ne(festivals.status, 'dismissed')])))
+    .orderBy(desc(festivalRequests.weekStart), desc(festivals.createdAt))
+    .all()
+  const scr = rows.length
+    ? db
+        .select({ festivalId: screenings.festivalId, feedback: screenings.feedback })
+        .from(screenings)
+        .where(inArray(screenings.festivalId, rows.map((r) => r.f.id)))
+        .all()
+    : []
+  return rows.map((r) => ({ festival: r.f, weekStart: r.week, feedback: scr.filter((s) => s.festivalId === r.f.id).map((s) => s.feedback) }))
 }

@@ -107,14 +107,17 @@ export async function curate(req: CurateRequest): Promise<CurationResult> {
   const ctx: CuratorContext = assembleContext(req.userId)
   const today = req.today ?? formatInTimeZone(now, ctx.user.tz, 'yyyy-MM-dd')
   const history = recentProgrammes(req.userId, { sinceWeek: addDays(req.weekStart, -84), beforeWeek: req.weekStart })
-  const avoidIds = new Set<number>([...req.avoid.tmdb_ids, ...notInterestedIds(req.userId), ...history.flatMap((h) => h.films.map((f) => f.tmdbId))])
+  const notInterested = notInterestedIds(req.userId)
+  const avoidIds = new Set<number>([...req.avoid.tmdb_ids, ...notInterested, ...history.flatMap((h) => h.films.map((f) => f.tmdbId))])
+  // 告诉模型的回避列表：reroll 累积的 + 用户标过「不感兴趣」的（落地校验另有硬过滤）
+  const promptAvoid = { ...req.avoid, tmdb_ids: [...new Set([...req.avoid.tmdb_ids, ...notInterested])].sort((a, b) => a - b) }
   let usage = emptyTotals()
 
   // 2. Call A
   progress(8, 'ideating：策展人在想这周放什么…')
   const a = await ideate(
     ctx,
-    { mode, n, days: feasibility.days, today, slotsSummary: summary, maxRuntime: feasibility.maxRuntime, history, avoid: req.avoid },
+    { mode, n, days: feasibility.days, today, slotsSummary: summary, maxRuntime: feasibility.maxRuntime, history, avoid: promptAvoid },
     { client, jobId: req.jobId, log },
   )
   usage = mergeTotals(usage, a.usage)

@@ -25,7 +25,10 @@ export function formatHistory(history: HistoryItem[]): string {
   if (!history.length) return '  (none yet)'
   return history
     .slice(0, 12)
-    .map((h) => `  - ${h.weekStart} ${h.kind} · ${h.subject} · [${h.films.map((f) => `${f.tmdbId} ${f.title}`).join('; ')}]`)
+    .map(
+      (h) =>
+        `  - ${h.weekStart} ${h.kind} · ${h.subject} · [${h.films.map((f) => `${f.tmdbId} ${f.title}${f.feedback ? ` (${f.feedback.replace('_', ' ')})` : ''}`).join('; ')}]`,
+    )
     .join('\n')
 }
 

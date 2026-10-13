@@ -20,6 +20,8 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
   const initial = resolveAvailability(user.id, weekStart)
   const tpl = getAvailability(user.id, 'template')
   const thisWeeks = recentProgrammes(user.id, { sinceWeek: weekStart }).filter((h) => h.weekStart === weekStart)
+  // 回访（1.1 第 6 步）：上周的影展还有没反馈的场次
+  const lastWeek = recentProgrammes(user.id, { sinceWeek: addDays(thisWeek!, -7), beforeWeek: thisWeek! }).find((h) => h.films.some((f) => !f.feedback))
   const dates = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
 
   return (
@@ -40,6 +42,16 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
           画像还在生成中，去 <Link className="underline" href="/taste">画像</Link> 看看进度。
         </p>
       ) : null}
+
+      {lastWeek && (
+        <div className="rounded border border-accent/50 p-4 text-sm">
+          上周的「
+          <Link href={`/festival/${lastWeek.festivalId}`} className="font-serif underline">
+            {lastWeek.title}
+          </Link>
+          」看了吗？去勾一下「看了 / 没看 / 不感兴趣」——这会影响下一次策展。
+        </div>
+      )}
 
       {thisWeeks.length > 0 && (
         <div className="rounded border border-ink p-4 text-sm">

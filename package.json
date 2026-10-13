@@ -19,7 +19,8 @@
     "curate": "tsx scripts/curate.ts",
     "test": "vitest run",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "start:all": "node scripts/start-all.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",

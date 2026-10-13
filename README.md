@@ -16,6 +16,16 @@ pnpm worker                 # 另开终端：后台任务
 
 `DEV_LOGIN=1` 时首页有「开发登录」，或直接访问 `/api/auth/dev`，以 `dev@local` 登录。
 
+### 没有任何 key 也能走通全流程（离线演示）
+
+```bash
+pnpm tsx scripts/seed-fixtures.ts --as dev@local --persona sinophone   # 446 部离线片目 + 把一个合成画像的观影记录给 dev@local
+export TMDB_FIXTURE_CATALOG=data/fixtures/catalog.json LLM_TRANSPORT=mock
+pnpm dev & pnpm worker
+```
+
+`LLM_TRANSPORT=mock` 是确定性的离线桩，文本是占位；真实策展需要 `ANTHROPIC_API_KEY`（去掉 `LLM_TRANSPORT`）。
+
 | 命令 | 作用 |
 |------|------|
 | `pnpm dev` / `build` / `start` | Next.js |
@@ -31,6 +41,8 @@ pnpm worker                 # 另开终端：后台任务
 cp .env.example .env   # 填好
 docker compose up -d --build   # web + worker 两个容器，SQLite 在 ./data
 ```
+
+详细部署（Google OAuth、TMDB、单容器模式、备份、升级）见 [`docs/DEPLOY.md`](./docs/DEPLOY.md)。
 
 ## 实现说明与偏离（按里程碑累积）
 
@@ -127,3 +139,15 @@ docker compose up -d --build   # web + worker 两个容器，SQLite 在 ./data
   RSS 写入时跳过「同 tmdb_id + 同观看日期」已存在的观看；ZIP 在 RSS 之后导入时无法在写入时去重（那时还没匹配 TMDB），
   所以「看了几次」统一按**不同的观看日期**计数（W 标记、片库 ×N）。worker 每 10 分钟检查，距上次 ≥ 12 小时的 RSS 来源自动增量同步。
 - 跨来源合并：Letterboxd 与豆瓣的同一部片在片库里是一行（providers 同时列出两者）。
+
+### M7
+
+- 反馈：每场「看了 / 没看 / 不感兴趣」，再点一次撤回。「看了」写一条 `provider = fest` 的 watch_log（从此算看过）；
+  「不感兴趣」进入落地校验的硬过滤，也写进 Call A user 消息的 avoid 列表；历史里的每部片带上反馈标注给策展人看。
+  全部场次都有反馈 → 影展 `completed`；`/plan` 会提示上周还没反馈的影展。`{dismiss: true}` 把影展置 dismissed（并删除已写入的 Google 事件）。
+- `/history`：历次影展（默认隐藏换掉的）、反馈统计。`/settings`：时区、语言、排期偏好、来源入口、webcal 地址与轮换、
+  Google 授权状态、Claude API 用量（近 30 天 / 全部，按用途，含缓存命中率与估算美元）。
+- 部署：构建阶段用完整的 `node:22-bookworm`（自带编译工具，不需要 apt-get），运行阶段用 slim；构建时预置 pnpm（运行时不联网）；
+  `/api/health` + Docker HEALTHCHECK；compose 里 worker 等 web 健康后启动；`pnpm start:all` 单容器模式。
+  已在本环境用 Docker 实测：`docker compose up` → web 健康、自动迁移，worker 从共享的 SQLite 卷取任务执行。
+  （本地验证时为了走沙箱出口代理额外注入了代理 CA，那几行不在仓库里。）镜像约 1.7 GB（保留了 dev 依赖，worker 直接用 tsx 跑源码）。
