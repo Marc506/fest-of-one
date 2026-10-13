@@ -1,0 +1,1 @@
+Only one film will be shown, and it will not be presented as a festival. The slate must contain exactly one film — your single_pick — at position 1 with role "opening". revised_title: the film's title in the locale. revised_statement: a recommendation of at most 150 words, addressed to the viewer, explaining why this film, now — no festival language. program_note: 60–120 words.

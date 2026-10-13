@@ -72,3 +72,24 @@ docker compose up -d --build   # web + worker 两个容器，SQLite 在 ./data
 - LLM 层：无工具的结构化调用用 `messages.parse`；Call A 的工具循环用 `messages.create` + 本地 zod 校验（7.3）。
   `messages.parse` 在解析失败时抛错、拿不到原始响应，所以只能「整次重试一次」，部分文本的 refusal 也会表现为解析失败。
 - 备忘的数值在代码侧夹到 0–1，证据 tmdb_id 只保留观影记录里真实存在的。prompt 要求不假设观众性别。
+
+### M3
+
+- `pnpm curate`：`--persona slow|genre|sinophone|all` 用 3 个合成画像 + 446 部离线片目（`tests/fixtures/catalog`，
+  部分 tmdb_id 是合成的，只用于离线测试）；`--mock` 用确定性桩代替 Claude（文本是占位、用量是模拟值，
+  用来跑通流水线与不变量，**不代表 prompt 质量**）；`--replay` 按 request_hash 回放 `llm_calls` 里的录制响应；
+  不带这两个开关时调用真实的 `claude-opus-5-5`（需要 `ANTHROPIC_API_KEY`）。
+- **prompt 未经真实 API 打磨**：本环境没有 API key、TMDB 也不可达。CLAUDE.md 要求 M3 先在 CLI 上把 prompt 打磨满意再接 UI；
+  这一步需要有 key 的人来做：`pnpm curate --user <你> --days 3 --count 4`，看概念 / 审查 / 评分 / 缓存命中，改
+  `src/curator/prompts/*.md` 并 bump `PROMPT_VERSION`。
+- 结构化输出的 JSON Schema 自己生成（`strictJsonSchema`），解析与校验仍用 SDK 的 `zodOutputFormat`：
+  SDK 0.133 的 transformJSONSchema 会把 `enum` 挪进 description（失去约束），zod 的 `.int()` 还会带 ±2^53 边界。
+- Call A 的工具循环在最后一条消息上放第 4 个缓存断点（7.2 说第 4 个留给 Call B 的概念块——Call A 里它本来空着）。
+- Call B 先单独跑一个「暖缓存」，再并行其余（≤ 6）：并发请求互相读不到对方刚写的缓存。
+- 选择时 coherence / confidence 取 Call B（审查后），taste_fit / novelty / ambition 取 Call A 自评；
+  「slate 排不进可用时间」用真实排期器判定（而不是只比总片长与容量）。
+- 落地校验额外剔除「近 12 周已经排过的片」；注定会被排除的概念（回避 / 12 周内同主题）不再花钱审查。
+- 排期器：天数排不下时依次尝试「放宽顺序」→「相邻天数」→ 贪心兜底（结果标记 `order: strict | relaxed | any`）；
+  preferred_start 只在当天所有场次仍放得下时采用。
+- 单部模式的 festival.subject 用「片名 (年份)」，标题用片库里的本地化片名（没有中文译名时是原名 / 英文名）。
+- 日本片的纯汉字原名在无 zh-CN 译名时也作为中文标题（之前会被丢弃）。

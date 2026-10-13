@@ -7,7 +7,16 @@ import { join } from 'node:path'
 
 export const PROMPT_VERSION = 'v1'
 
-export type PromptName = 'curator.system' | 'taste_memo.user' | 'ideate.user' | 'audit.system' | 'audit.user'
+export type PromptName =
+  | 'curator.system'
+  | 'taste_memo.user'
+  | 'ideate.user'
+  | 'ideate.mode.festival'
+  | 'ideate.mode.single'
+  | 'audit.system'
+  | 'audit.user'
+  | 'audit.mode.festival'
+  | 'audit.mode.single'
 
 const frozen = new Map<PromptName, string>()
 

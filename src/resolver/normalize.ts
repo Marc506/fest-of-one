@@ -68,3 +68,8 @@ export function nameSim(a: string, b: string): number {
   const tb = normalizeTitle(b).split(' ').filter(Boolean).sort().join(' ')
   return Math.max(titleSim(a, b), titleSim(ta, tb))
 }
+
+/** 含汉字且不含假名 / 谚文：日本片的纯汉字原名对中文读者也可读。 */
+export function isHanOnly(s: string): boolean {
+  return /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/.test(s) && !/[\u3040-\u30ff\uac00-\ud7af]/.test(s)
+}

@@ -5,7 +5,7 @@ import { getFilm, upsertFilm } from '@/db/repo/library'
 import type { CastMember, PersonRef } from '@/db/types'
 import { mapLimit } from '@/lib/http'
 import { nowIso } from '@/lib/time'
-import { isCjk } from './normalize'
+import { isHanOnly } from './normalize'
 import { yearOf, type TmdbClient, type TmdbMovieDetails } from './tmdb'
 
 export const ENRICH_TTL_DAYS = 30
@@ -30,9 +30,9 @@ export function detailsToFilm(en: TmdbMovieDetails, zh: TmdbMovieDetails | null)
     .sort((a, b) => a.order - b.order)
     .slice(0, 10)
     .map((c) => ({ tmdb_person_id: c.id, name: c.name, character: c.character || null, order: c.order }))
-  // zh-CN 无译名时 TMDB 回退原名；日韩片原名也含 CJK，所以只在「是中文片」或「与原名不同」时采信
+  // zh-CN 无译名时 TMDB 回退原名：只在「中文 / 日本片的纯汉字原名」或「与原名不同的汉字译名」时采信（韩文、假名不算）
   const zhTitle =
-    zh?.title && isCjk(zh.title) && (zh.title !== en.original_title || ['zh', 'cn'].includes(en.original_language))
+    zh?.title && isHanOnly(zh.title) && (zh.title !== en.original_title || ['zh', 'cn', 'ja'].includes(en.original_language))
       ? zh.title
       : null
   return {

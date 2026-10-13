@@ -8,8 +8,8 @@
  */
 import { createHash } from 'node:crypto'
 import Anthropic from '@anthropic-ai/sdk'
-import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
 import type { z } from 'zod'
+import { outputFormat } from '@/curator/schemas'
 import { insertLlmCall } from '@/db/repo/llm'
 import type { llmCalls } from '@/db/schema'
 import { getTransport, MAX_TOKENS, MODEL } from './client'
@@ -60,6 +60,20 @@ export function requestHash(system: unknown, messages: unknown, tools: unknown):
 }
 
 const FINAL_NUDGE = 'Emit the final JSON now.'
+
+/**
+ * 工具循环里把第 4 个缓存断点放在最后一条消息上（system 用了 3 个），
+ * 这样每一轮只为新增的工具结果付全价。偏离：7.2 说第 4 个留给 Call B 的概念块——Call A 里它本来闲着。
+ */
+function withMovingBreakpoint(messages: Anthropic.MessageParam[]): Anthropic.MessageParam[] {
+  if (!messages.length) return messages
+  const last = messages.at(-1)!
+  const blocks: Anthropic.ContentBlockParam[] = typeof last.content === 'string' ? [{ type: 'text', text: last.content }] : [...last.content]
+  const tail = blocks.at(-1)
+  if (!tail || !('type' in tail) || !['text', 'tool_result'].includes(tail.type)) return messages
+  blocks[blocks.length - 1] = { ...tail, cache_control: { type: 'ephemeral', ttl: '1h' } } as Anthropic.ContentBlockParam
+  return [...messages.slice(0, -1), { ...last, content: blocks }]
+}
 const TOOL_BUDGET_EXHAUSTED =
   'Tool budget exhausted. Do not call any more tools; emit the final JSON answer now using only films already returned by tools.'
 
@@ -83,7 +97,7 @@ export async function callStructured<T>(o: CallOptions<T>): Promise<CallResult<T
   const log = o.log ?? ((l: string) => console.log(l))
   const messages: Anthropic.MessageParam[] = [...o.messages]
   const toolCalls: CallResult<T>['toolCalls'] = []
-  const format = zodOutputFormat(o.schema)
+  const format = outputFormat(o.schema)
   const tools = o.tools?.defs
 
   const record = (res: Anthropic.Message | null, started: number, hash: string, error?: string) => {
@@ -131,7 +145,7 @@ export async function callStructured<T>(o: CallOptions<T>): Promise<CallResult<T
         messages,
         output_config: { effort: o.effort, format },
       }
-      const hash = requestHash(o.system, messages, null)
+      const hash = requestHash(params.system, params.messages, null)
       const started = Date.now()
       let res
       try {
@@ -162,11 +176,11 @@ export async function callStructured<T>(o: CallOptions<T>): Promise<CallResult<T
       model: MODEL,
       max_tokens: o.maxTokens ?? MAX_TOKENS,
       system: o.system,
-      messages,
+      messages: withMovingBreakpoint(messages),
       tools,
       output_config: { effort: o.effort, format: { type: 'json_schema', schema: format.schema } },
     }
-    const hash = requestHash(o.system, messages, tools)
+    const hash = requestHash(params.system, params.messages, tools)
     const started = Date.now()
     const res = await transport.create(params)
     record(res, started, hash)
