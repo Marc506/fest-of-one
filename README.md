@@ -151,3 +151,10 @@ docker compose up -d --build   # web + worker 两个容器，SQLite 在 ./data
   `/api/health` + Docker HEALTHCHECK；compose 里 worker 等 web 健康后启动；`pnpm start:all` 单容器模式。
   已在本环境用 Docker 实测：`docker compose up` → web 健康、自动迁移，worker 从共享的 SQLite 卷取任务执行。
   （本地验证时为了走沙箱出口代理额外注入了代理 CA，那几行不在仓库里。）镜像约 1.7 GB（保留了 dev 依赖，worker 直接用 tsx 跑源码）。
+
+### 豆瓣导出的实际格式（M6 补充）
+
+- 社区工具 [douban-frodo-export](https://github.com/daymade/claude-code-skills/tree/main/douban-skill)（`DOUBAN_USER=<id> python3 scripts/douban-frodo-export.py`，
+  不需要 Cookie，主页需公开）导出的 `影视.csv` 列为 `title, url, date, rating, status, comment`，评分是 `★`–`★★★★★`——已支持。
+- 这份 CSV **没有年份**，匹配只能靠中文片名 + 热度；同名片会进「待确认」。`影视.csv` 里也有电视剧，TMDB 电影库匹配不上，会留在「待确认」，可以忽略。
+- 豆瓣网页现在有 PoW 验证，Cookie 抓取多半会被拦（应用会立刻停下并提示改用上传）。

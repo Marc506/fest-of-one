@@ -2,7 +2,7 @@
  * 豆瓣第三方导出（5.3 upload 模式，主路径）：CSV 或 Excel（多个工作表时，表名可代表状态：「看过」「想看」）。
  * 按列名启发式识别（不依赖列序）：
  *   含 url / 链接 / link 的列 → subject id；title / 标题 / 片名 → 标题；date / 日期 / 时间 → 日期；
- *   rating / 评分 / 星级 → 1–5 或「力荐 推荐 还行 较差 很差」→ ×2；status / 状态 → 看过 / 想看；
+ *   rating / 评分 / 星级 → 1–5、★ 到 ★★★★★ 或「力荐 推荐 还行 较差 很差」→ ×2；status / 状态 → 看过 / 想看；
  *   comment / 短评 / 评语 → 短评；tags / 标签；上映日期 / 年份 → 年份；IMDb → imdb id。
  * 非官方格式、可能变化：识别不出必需的列时给出明确错误。
  */
@@ -19,6 +19,9 @@ export function doubanRating10(v: string | undefined): number | undefined {
   if (!v) return undefined
   const t = v.trim()
   for (const [w, n] of Object.entries(WORDS)) if (t.includes(w)) return n * 2
+  // 星号写法（如 douban-frodo-export 的「★★★★」；☆ 是空星不计）
+  const stars = (t.match(/★/g) ?? []).length
+  if (stars >= 1 && stars <= 5) return stars * 2
   const n = Number(t.match(/\d+(\.\d+)?/)?.[0])
   if (!Number.isFinite(n) || n <= 0) return undefined
   if (n <= 5) return Math.round(n * 2)

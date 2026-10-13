@@ -63,6 +63,7 @@ describe('Douban export parsing (5.3)', () => {
   it('maps ratings: words and stars ×2', () => {
     expect([doubanRating10('力荐'), doubanRating10('推荐'), doubanRating10('还行'), doubanRating10('较差'), doubanRating10('很差')]).toEqual([10, 8, 6, 4, 2])
     expect(doubanRating10('3')).toBe(6)
+    expect([doubanRating10('★'), doubanRating10('★★★'), doubanRating10('★★★★★'), doubanRating10('★★★☆☆')]).toEqual([2, 6, 10, 6])
     expect(doubanRating10('')).toBeUndefined()
   })
 
@@ -74,6 +75,21 @@ describe('Douban export parsing (5.3)', () => {
     expect(by('1293035').rating10).toBe(6)
     expect(by('1292207')).toMatchObject({ listKind: 'watchlist', entryId: 'douban:wish:1292207' })
     expect(() => parseDoubanCsv('foo,bar\n1,2')).toThrow(/标题/)
+  })
+
+  it('parses the douban-frodo-export 影视.csv format (BOM, ★ ratings, 看过 / 在看 / 想看)', () => {
+    const csv =
+      '\uFEFFtitle,url,date,rating,status,comment\n' +
+      '花样年华,https://movie.douban.com/subject/1291557/,2023-02-10,★★★★★,看过,旗袍\n' +
+      '某部剧,https://movie.douban.com/subject/30000001/,2024-05-01,,在看,\n' +
+      '悲情城市,https://movie.douban.com/subject/1292207/,2024-01-02,,想看,\n' +
+      '人鬼情未了,https://movie.douban.com/subject/1291833/,2020-01-01,★★,看过,\n'
+    const es = parseDoubanCsv(csv)
+    expect(es.map((e) => [e.externalId, e.listKind, e.rating10, e.watchedAt])).toEqual([
+      ['1291557', 'watched', 10, '2023-02-10'],
+      ['1292207', 'watchlist', undefined, undefined],
+      ['1291833', 'watched', 4, '2020-01-01'],
+    ])
   })
 
   it('parses Excel with one sheet per status', async () => {

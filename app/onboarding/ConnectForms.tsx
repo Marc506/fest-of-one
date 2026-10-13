@@ -62,7 +62,11 @@ export function DoubanConnect() {
       </div>
       {tab === 'upload' ? (
         <>
-          <p className="text-xs text-muted">第三方工具（如豆伴）导出的 CSV / Excel，需要包含标题与条目链接两列。</p>
+          <p className="text-xs leading-5 text-muted">
+            推荐用社区工具 douban-frodo-export 导出「影视.csv」（不需要 Cookie，豆瓣主页需公开）：
+            <code className="mx-1 rounded bg-rule/60 px-1">DOUBAN_USER=你的ID python3 douban-frodo-export.py</code>
+            。也接受豆伴等工具导出的 CSV / Excel——至少要有标题和条目链接两列。
+          </p>
           <UploadSource provider="douban" accept=".csv,.xlsx" label="上传并导入" />
         </>
       ) : (
@@ -80,7 +84,9 @@ export function DoubanConnect() {
             rows={3}
             className="w-full rounded border border-rule bg-transparent px-3 py-1.5 font-mono text-xs"
           />
-          <p className="text-xs text-muted">每页间隔 2–4 秒，最多 100 页；遇到验证会立刻停下并提示，不会绕过验证码。</p>
+          <p className="text-xs text-muted">
+            注意：豆瓣网页现在有工作量证明（PoW）验证，这种抓取多半会被拦下，优先用上面的导出。每页间隔 2–4 秒，最多 100 页；遇到验证会立刻停下并提示，不会绕过。
+          </p>
           <Button
             disabled={!people.trim() || !cookie.trim()}
             onClick={async () => {
