@@ -231,6 +231,24 @@ export function upsertWatchlistEntry(e: {
     .run()
 }
 
+/** 是否已有同一次观看（同 tmdb_id + 同观看日期，但来自另一条记录）——RSS 与 ZIP 去重用。 */
+export function hasOtherViewing(userId: string, tmdbId: number, watchedAt: string, externalEntryId: string): boolean {
+  return Boolean(
+    getDb()
+      .select({ id: watchLog.id })
+      .from(watchLog)
+      .where(
+        and(
+          eq(watchLog.userId, userId),
+          eq(watchLog.tmdbId, tmdbId),
+          eq(watchLog.watchedAt, watchedAt),
+          sql`${watchLog.externalEntryId} <> ${externalEntryId}`,
+        ),
+      )
+      .get(),
+  )
+}
+
 /** 全量同步后清理：该来源下本次没再出现的条目（用户在来源侧删除了）。 */
 export function pruneSourceEntries(sourceId: string, keepLogEntryIds: string[], keepListAliasIds: number[]): { log: number; list: number } {
   const db = getDb()
@@ -359,7 +377,7 @@ export function listLibrary(userId: string, query: LibraryQuery = {}): { rows: L
       yearRaw: sql<number | null>`min(${filmAliases.yearRaw})`,
       matchStatus: sql<FilmAlias['matchStatus']>`min(${filmAliases.matchStatus})`,
       providers: sql<string>`group_concat(distinct ${watchLog.provider})`,
-      views: sql<number>`count(*)`,
+      views: sql<number>`max(1, count(distinct ${watchLog.watchedAt}))`,
       lastWatched: sql<string | null>`max(coalesce(${watchLog.watchedAt}, ${watchLog.loggedAt}))`,
       rating10: ratingAgg,
       liked: sql<number>`max(${watchLog.liked})`,

@@ -74,7 +74,8 @@ export function loadViewerFilms(userId: string): ViewerFilm[] {
       rating10: rated?.rating10 ?? null,
       liked: g.some((r) => r.liked),
       rewatch: g.some((r) => r.rewatch),
-      views: g.length,
+      // 不同来源（ZIP / RSS / 豆瓣）可能各有一行同一次观看：按「不同的观看日期」计数
+      views: Math.max(1, new Set(g.map((r) => r.watchedAt).filter(Boolean)).size),
       lastWatched: dated[0] ?? null,
       film,
     })

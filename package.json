@@ -27,6 +27,7 @@
     "@next/env": "15.5.27",
     "adm-zip": "^0.6.1",
     "better-sqlite3": "^12.11.1",
+    "cheerio": "^1.2.0",
     "date-fns": "^4.4.0",
     "date-fns-tz": "^3.2.0",
     "drizzle-orm": "^0.45.4",
@@ -36,6 +37,7 @@
     "papaparse": "^5.7.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "read-excel-file": "^9.3.12",
     "tsx": "^4.23.15",
     "zod": "^4.6.7"
   },

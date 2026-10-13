@@ -4,6 +4,7 @@
  */
 import { tx } from '@/db/client'
 import {
+  hasOtherViewing,
   insertFilmStub,
   pruneSourceEntries,
   setAliasMatch,
@@ -14,7 +15,7 @@ import {
 import type { SourceAccount } from '@/db/schema'
 import type { RawEntry } from './types'
 
-export type SyncStats = { watched: number; watchlist: number; aliases: number; pruned: { log: number; list: number } | null }
+export type SyncStats = { watched: number; watchlist: number; aliases: number; duplicates: number; pruned: { log: number; list: number } | null }
 
 const CHUNK = 200
 
@@ -22,11 +23,12 @@ export function writeEntries(
   userId: string,
   source: Pick<SourceAccount, 'id'> | null,
   entries: RawEntry[],
-  opts: { prune: boolean; onProgress?: (done: number, total: number) => void } = { prune: false },
+  opts: { prune: boolean; dedupeViewings?: boolean; onProgress?: (done: number, total: number) => void } = { prune: false },
 ): SyncStats {
   const seenLog: string[] = []
   const seenList: number[] = []
   const aliasIds = new Set<number>()
+  let duplicates = 0
   for (let i = 0; i < entries.length; i += CHUNK) {
     tx(() => {
       for (const e of entries.slice(i, i + CHUNK)) {
@@ -45,6 +47,11 @@ export function writeEntries(
         }
         aliasIds.add(alias.id)
         if (e.listKind === 'watched') {
+          // RSS 与 ZIP 是同一份 diary 的两种出口：同一部片同一天的观看只记一次
+          if (opts.dedupeViewings && alias.tmdbId && e.watchedAt && hasOtherViewing(userId, alias.tmdbId, e.watchedAt, e.entryId)) {
+            duplicates++
+            continue
+          }
           upsertWatchEntry({
             userId,
             sourceId: source?.id ?? null,
@@ -79,7 +86,7 @@ export function writeEntries(
     opts.onProgress?.(Math.min(i + CHUNK, entries.length), entries.length)
   }
   const pruned = opts.prune && source ? pruneSourceEntries(source.id, seenLog, seenList) : null
-  return { watched: seenLog.length, watchlist: seenList.length, aliases: aliasIds.size, pruned }
+  return { watched: seenLog.length, watchlist: seenList.length, aliases: aliasIds.size, duplicates, pruned }
 }
 
 export async function collect<T>(it: AsyncIterable<T>): Promise<T[]> {

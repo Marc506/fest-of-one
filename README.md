@@ -115,3 +115,15 @@ docker compose up -d --build   # web + worker 两个容器，SQLite 在 ./data
   回到 `/festival/{id}?gcal=1` 后自动继续写入。
 - 验收「macOS 日历导入 / Google 订阅可见 / API 写入后 reroll 删除旧事件」在本环境只能用回读与假 Google API 测试覆盖
   （没有 Google OAuth 凭据、没有 macOS）；部署后请用真实账号复核一次。
+
+### M6
+
+- 豆瓣上传：CSV 与 Excel（多工作表时表名可表示「看过 / 想看」）；按列名启发式识别，「在看」跳过；缺必需列时给出明确错误。
+- 豆瓣抓取：Cookie 用 AES-256-GCM 加密保存（`APP_ENCRYPTION_KEY`），UI 只显示「已设置」，可随时清除（`PATCH /api/sources/{id}`）；
+  每请求 2–4 秒随机间隔、单次最多 100 页；403 / 跳转验证或登录页 → 立刻停止并提示「需要重新提供 Cookie 或改用上传」；
+  游标 = 最新 subject id。新条目 ≤ 60 时顺带抓 subject 页的 IMDb 号（resolver 用 TMDB find 精确匹配），条目太多时不抓（否则一次同步要几个小时）。
+  本环境访问不到豆瓣，用 HTML fixture 测试。
+- Letterboxd RSS：影片键 `letterboxd:tmdb:{id}`（RSS 没有 boxd.it 影片链接），与 ZIP 的同一部片在 tmdb_id 层合并；
+  RSS 写入时跳过「同 tmdb_id + 同观看日期」已存在的观看；ZIP 在 RSS 之后导入时无法在写入时去重（那时还没匹配 TMDB），
+  所以「看了几次」统一按**不同的观看日期**计数（W 标记、片库 ×N）。worker 每 10 分钟检查，距上次 ≥ 12 小时的 RSS 来源自动增量同步。
+- 跨来源合并：Letterboxd 与豆瓣的同一部片在片库里是一行（providers 同时列出两者）。

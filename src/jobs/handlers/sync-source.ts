@@ -30,6 +30,7 @@ export const syncSourceHandler = defineHandler({
       progress(40, `写入 ${entries.length} 条记录…`)
       const stats = writeEntries(account.userId, account, entries, {
         prune: Boolean(payload.full && account.syncMode === 'upload'),
+        dedupeViewings: account.syncMode === 'rss',
         onProgress: (d, t) => progress(40 + (d / Math.max(1, t)) * 55, `写入 ${d}/${t}`),
       })
       markSourceSynced(account.id, { cursor: adapter.nextCursor ?? account.cursor ?? null })

@@ -2,6 +2,7 @@ import { libraryCounts, matchStats } from '@/db/repo/library'
 import { listSources } from '@/db/repo/sources'
 import { requirePageUser } from '@/lib/session'
 import { Badge, Card, fmtDate } from '../_components/ui'
+import { ClearCookieButton, DoubanConnect, LetterboxdRss } from './ConnectForms'
 import { LetterboxdUpload } from './LetterboxdUpload'
 import { SourceActions } from './SourceActions'
 
@@ -32,11 +33,11 @@ export default async function OnboardingPage() {
         <Card title="Letterboxd · 导出 ZIP" footer="Settings → Import & Export → Export your data。无需登录、全量导入。">
           <LetterboxdUpload />
         </Card>
-        <Card title="Letterboxd · RSS 增量" footer="只含最近约 50 条 diary，用于导入后的日常增量。">
-          <p className="text-muted">即将支持（M6）。</p>
+        <Card title="Letterboxd · RSS 增量" footer="只含最近约 50 条 diary，导入 ZIP 之后用它做日常增量（每 12 小时自动同步）。只在影片页打星、没写 diary 的评分不会出现在 RSS。">
+          <LetterboxdRss />
         </Card>
-        <Card title="豆瓣" footer="非官方、可能失效：豆瓣没有开放 API。">
-          <p className="text-muted">CSV 上传与 Cookie 抓取即将支持（M6）。</p>
+        <Card title="豆瓣" footer="非官方、可能失效：豆瓣没有开放 API，也没有官方导出。">
+          <DoubanConnect />
         </Card>
       </div>
 
@@ -51,9 +52,16 @@ export default async function OnboardingPage() {
                     <span className="font-medium">{PROVIDER[s.provider]}</span>
                     <Badge>{MODE[s.syncMode]}</Badge>
                     {s.handle !== 'export' && <span className="text-muted">{s.handle}</span>}
+                    {s.provider === 'douban' && <Badge tone="accent">非官方</Badge>}
                   </div>
                   <p className="text-xs text-muted">上次同步：{fmtDate(s.lastSyncAt)}</p>
                   {s.lastError && <p className="text-xs text-accent">上次失败：{s.lastError}</p>}
+                  {s.syncMode === 'scrape' && (
+                    <p className="flex gap-2 text-xs text-muted">
+                      Cookie：{s.authEnc ? '已设置' : '未设置'}
+                      {s.authEnc && <ClearCookieButton id={s.id} />}
+                    </p>
+                  )}
                 </div>
                 <SourceActions id={s.id} />
               </li>

@@ -19,6 +19,7 @@ import {
 import { runMigrations } from '@/db/migrate'
 import type { Job } from '@/db/schema'
 import { sleep } from '@/lib/time'
+import { enqueueDueRssSyncs } from '@/sources/schedule'
 import { handlers } from './handlers'
 
 const HEARTBEAT_MS = 10_000
@@ -119,6 +120,11 @@ async function main() {
     const r = recoverStaleJobs()
     if (r.requeued || r.failed) console.log(`[worker] stale recovery: requeued ${r.requeued}, failed ${r.failed}`)
   }, STALE_SCAN_MS)
+  // Letterboxd RSS 定时增量
+  const rssTimer = setInterval(() => {
+    const n = enqueueDueRssSyncs()
+    if (n) console.log(`[worker] enqueued ${n} RSS sync(s)`)
+  }, 10 * 60_000)
 
   console.log('[worker] started; polling jobs')
   while (!stopping) {
@@ -131,6 +137,7 @@ async function main() {
     current = undefined
   }
   clearInterval(staleTimer)
+  clearInterval(rssTimer)
   process.exit(0)
 }
 
