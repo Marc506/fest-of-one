@@ -59,3 +59,16 @@ docker compose up -d --build   # web + worker 两个容器，SQLite 在 ./data
   代替 HTTP；用于测试、`pnpm curate` fixture，以及无 TMDB 网络时的本地开发。
 - 验收「真实导出 ZIP 匹配率 ≥ 95%」在本环境无法执行（TMDB 与 Letterboxd 被网络策略拦截，也没有真实导出），
   用合成导出 + 录制的 TMDB 响应 + 离线片目做了等价测试；拿到 token 后请用真实 ZIP 复核一次。
+
+### M2
+
+- 画像 LLM 调用的 system 布局：`[0]` 策展 system（与策展调用共享缓存）`[1]` `## Stats` `[2]` 完整观影记录；三块都带 1h 缓存断点。
+- `TasteStats.register` 的三个指标是近似：「高热度」用 TMDB `vote_count ≥ 4000` 代替「该年 popularity 分位」；
+  「影展核心」= `vote_count < 1500` 且非美国出品，或 `vote_count < 800` 的剧情片。演员只统计前 5 位主演。
+- 序列化 FULL / INDEX 分段里的「近 3 年」以记录中最晚的观看日期为锚点（不是今天），保证同一份记录永远同样的字节。
+- 重建策略：记录 hash 变化且（新增 ≥ 20 部 或 距上次 ≥ 30 天），或手动「重建画像」；记录完全没变时 30 天到期不重建。
+  策展时观影记录块总是从数据库现取（P3），只有备忘可能略旧。
+- 未配置 `ANTHROPIC_API_KEY` 时 `build_taste` 只写统计层（memo 为空），`/taste` 照常展示统计。
+- LLM 层：无工具的结构化调用用 `messages.parse`；Call A 的工具循环用 `messages.create` + 本地 zod 校验（7.3）。
+  `messages.parse` 在解析失败时抛错、拿不到原始响应，所以只能「整次重试一次」，部分文本的 refusal 也会表现为解析失败。
+- 备忘的数值在代码侧夹到 0–1，证据 tmdb_id 只保留观影记录里真实存在的。prompt 要求不假设观众性别。

@@ -4,6 +4,8 @@ import { enrichMany, staleBefore } from '@/resolver/enrich'
 import { resolveAlias } from '@/resolver/match'
 import { getTmdbClient } from '@/resolver/tmdb'
 import { mapLimit } from '@/lib/http'
+import { rebuildDecision } from '@/taste/profile'
+import { enqueueJob } from '../queue'
 import { defineHandler, RetryableError, UserFacingError } from '../types'
 
 /** 解析未匹配条目 + 富化影片（5.4 / 5.5）。 */
@@ -41,7 +43,12 @@ export const enrichFilmsHandler = defineHandler({
     const stats = matchStats(userId)
     const total = Object.values(stats).reduce((a, b) => a + b, 0)
     const rate = total ? (stats.matched + stats.confirmed) / total : 1
+    // 画像：观影记录变化足够大时自动重建（6.2）
+    const decision = rebuildDecision(userId)
+    const taste = decision.needed ? enqueueJob('build_taste', { force: false }, userId) : null
     progress(100, `匹配率 ${(rate * 100).toFixed(1)}%，富化 ${enriched.enriched} 部`)
-    return { resolved: outcome, resolve_errors: errors, enriched: enriched.enriched, missing: enriched.missing, match_stats: stats, match_rate: rate }
+    return {
+      build_taste_job_id: taste?.id ?? null,
+      build_taste_reason: decision.reason, resolved: outcome, resolve_errors: errors, enriched: enriched.enriched, missing: enriched.missing, match_stats: stats, match_rate: rate }
   },
 })
