@@ -16,6 +16,8 @@ import { getUser } from '@/db/repo/users'
 import type { Festival, User } from '@/db/schema'
 import { enqueueJob } from '@/jobs/queue'
 import { UserFacingError } from '@/jobs/types'
+import { latestTasteProfile } from '@/db/repo/taste'
+import { llmConfigured } from '@/llm/client'
 import { addDays, checkFeasibility, currentWeekStart, deriveWindows } from '@/scheduler/slots'
 
 export const MAX_REROLLS = 5
@@ -28,6 +30,8 @@ export function allowedWeeks(user: Pick<User, 'tz'>, now = new Date()): string[]
 
 export function startGeneration(user: User, input: { weekStart: string; days: number; filmCount: number }, now = new Date()) {
   if (!allowedWeeks(user, now).includes(input.weekStart)) throw new UserFacingError('只能为本周或下周生成影展')
+  if (!llmConfigured()) throw new UserFacingError('服务器没有配置 ANTHROPIC_API_KEY，策展人无法工作')
+  if (!latestTasteProfile(user.id)) throw new UserFacingError('还没有品味画像：先导入观影记录，等画像生成后再来')
   const a = resolveAvailability(user.id, input.weekStart)
   const snapshot = { mode: a.mode, blocks: a.blocks, prefs: user.prefs, tz: user.tz }
   // 同步预检：不可行时立刻告诉用户，不必排队

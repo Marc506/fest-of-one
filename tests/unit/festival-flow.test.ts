@@ -75,6 +75,12 @@ describe('generate → festival → reroll (M4)', () => {
 
   it('rejects infeasible requests up front and weeks other than this / next', async () => {
     const user = await setup()
+    setTransport(undefined)
+    const key = process.env.ANTHROPIC_API_KEY
+    delete process.env.ANTHROPIC_API_KEY
+    expect(() => startGeneration(user, { weekStart: addDays(currentWeekStart(user.tz), 7), days: 1, filmCount: 1 })).toThrow(/ANTHROPIC_API_KEY/)
+    if (key) process.env.ANTHROPIC_API_KEY = key
+    setTransport(new MockCuratorTransport())
     const week = addDays(currentWeekStart(user.tz), 7)
     putAvailability(user.id, week, 'available', [{ dow: 2, start: '20:00', end: '21:00' }])
     expect(() => startGeneration(user, { weekStart: week, days: 1, filmCount: 1 })).toThrow(/没有可用时间/)
