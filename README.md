@@ -103,3 +103,15 @@ docker compose up -d --build   # web + worker 两个容器，SQLite 在 ./data
 - 开发 / 演示开关 `LLM_TRANSPORT=mock|replay`（默认真实 API）与 `scripts/seed-fixtures.ts`（把某个 fixture 画像的观影记录复制给
   dev@local），配合 `TMDB_FIXTURE_CATALOG=data/fixtures/catalog.json` 可在没有任何 key 的情况下走通整个 UI。
 - API 错误码：业务上不可行（UserFacingError）统一 422 `unprocessable`。
+
+### M5
+
+- ICS 手写（RFC 5545）：CRLF、按 75 字节折行且不切断多字节字符与转义序列、UTC 时间、无 LOCATION（P7）、`alarm_min` → VALARM；
+  用 `node-ical` 回读做测试。webcal 订阅源带 `REFRESH-INTERVAL` / `X-PUBLISHED-TTL`（6 小时，客户端未必遵守）。
+- Google API：`insert` 带 `iCalUID = calendar_uid`，409 时按 iCalUID 查到已有事件再 `update`（幂等）；已有 `google_event_id` 直接 update；
+  换一个时，若旧影展写过 Google 日历，自动入队 `push_google_calendar(action=delete)`。
+- Auth.js 只在第一次关联账户时保存 OAuth 令牌，增量授权后的新 scope / refresh token 不会写回——用 `events.signIn` 每次 Google 登录时更新 account 行。
+- 增量授权用 server action `signIn('google', …, { scope: '… calendar.events', access_type: 'offline', prompt: 'consent' })`，
+  回到 `/festival/{id}?gcal=1` 后自动继续写入。
+- 验收「macOS 日历导入 / Google 订阅可见 / API 写入后 reroll 删除旧事件」在本环境只能用回读与假 Google API 测试覆盖
+  （没有 Google OAuth 凭据、没有 macOS）；部署后请用真实账号复核一次。

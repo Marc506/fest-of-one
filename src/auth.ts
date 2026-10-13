@@ -6,6 +6,7 @@ import NextAuth, { type NextAuthConfig } from 'next-auth'
 import Credentials from 'next-auth/providers/credentials'
 import Google from 'next-auth/providers/google'
 import { DrizzleAdapter } from '@auth/drizzle-adapter'
+import { and, eq } from 'drizzle-orm'
 import { getDb } from '@/db/client'
 import { accounts, sessions, users, verificationTokens } from '@/db/schema'
 import { upsertUserByEmail } from '@/db/repo/users'
@@ -44,6 +45,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth(() => ({
   trustHost: true,
   providers: providers(),
   pages: { signIn: '/' },
+  events: {
+    /**
+     * Auth.js 只在第一次关联账户时保存 OAuth 令牌；增量授权（加上 calendar.events）后再登录不会更新。
+     * 这里每次 Google 登录都把最新的 access / refresh token、scope 写回 account 表（9.4）。
+     */
+    async signIn({ account }) {
+      if (account?.provider !== 'google') return
+      getDb()
+        .update(accounts)
+        .set({
+          access_token: account.access_token ?? null,
+          expires_at: account.expires_at ?? null,
+          scope: account.scope ?? null,
+          id_token: account.id_token ?? null,
+          token_type: account.token_type ?? null,
+          ...(account.refresh_token ? { refresh_token: account.refresh_token } : {}),
+        })
+        .where(and(eq(accounts.provider, 'google'), eq(accounts.providerAccountId, account.providerAccountId)))
+        .run()
+    },
+  },
   callbacks: {
     jwt({ token, user }) {
       if (user?.id) token.sub = user.id

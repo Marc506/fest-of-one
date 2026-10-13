@@ -60,6 +60,7 @@
     "eslint": "^9.39.5",
     "eslint-config-next": "15.5.27",
     "fast-check": "^4.10.2",
+    "node-ical": "^0.27.3",
     "postcss": "^8.5.30",
     "tailwindcss": "^4.3.3",
     "typescript": "5.9.3",

@@ -8,6 +8,12 @@ import { MAX_REROLLS } from '@/festival/service'
 import { requirePageUser } from '@/lib/session'
 import { Poster } from '../../_components/Poster'
 import { Badge } from '../../_components/ui'
+import { Suspense } from 'react'
+import { buildEvent } from '@/calendar/event'
+import { googleConfigured } from '@/calendar/google'
+import { googleTemplateLink, webcalUrls } from '@/calendar/links'
+import { env } from '@/lib/env'
+import { CalendarActions } from './CalendarActions'
 import { RerollButton } from './RerollButton'
 
 export const dynamic = 'force-dynamic'
@@ -39,6 +45,13 @@ export default async function FestivalPage({ params }: { params: Promise<{ id: s
   }
   const dayLabel = (d: string) => `${WEEKDAY[new Date(d + 'T12:00:00Z').getUTCDay()]} · ${Number(d.slice(5, 7))} 月 ${Number(d.slice(8))} 日`
   const time = (iso: string) => formatInTimeZone(iso, tz, 'HH:mm')
+  const baseUrl = env().APP_BASE_URL
+  const cal = webcalUrls(baseUrl, user.calendarToken)
+  const gLink = (s: (typeof screenings)[number]) => {
+    const m = films.get(s.tmdbId)
+    const e = m ? buildEvent({ screening: s, festival: f, film: m, user, baseUrl }) : null
+    return e ? googleTemplateLink(e) : null
+  }
 
   return (
     <article className="space-y-10">
@@ -62,6 +75,15 @@ export default async function FestivalPage({ params }: { params: Promise<{ id: s
         {f.status !== 'dismissed' && (
           <div className="flex flex-wrap items-start gap-3 pt-2">
             <RerollButton festivalId={f.id} left={MAX_REROLLS - (req?.rerollCount ?? 0)} />
+            <Suspense>
+              <CalendarActions
+                festivalId={f.id}
+                webcal={cal.webcal}
+                https={cal.https}
+                googleEnabled={googleConfigured()}
+                googleSyncedAt={f.googleCalendarSyncedAt}
+              />
+            </Suspense>
           </div>
         )}
       </header>
@@ -108,6 +130,11 @@ export default async function FestivalPage({ params }: { params: Promise<{ id: s
                           {[m.titleZh ? m.titleEn : null, m.directors.map((d) => d.name).join(' & '), m.countries.join(' / '), `${m.runtimeMin} 分钟`].filter(Boolean).join(' · ')}
                         </p>
                         <p className="max-w-2xl text-sm leading-7">{s.programNoteMd}</p>
+                        {f.status !== 'dismissed' && gLink(s) && (
+                          <a href={gLink(s)!} target="_blank" rel="noreferrer" className="text-xs text-muted underline hover:text-ink">
+                            只加这一场到 Google 日历 ↗
+                          </a>
+                        )}
                       </div>
                     </div>
                   </li>

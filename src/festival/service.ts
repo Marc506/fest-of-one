@@ -57,6 +57,8 @@ export function startReroll(user: User, festival: Festival) {
     tmdb_ids: [...new Set([...req.avoid.tmdb_ids, ...slate])],
   }
   setFestivalStatus(festival.id, 'dismissed')
+  // 已经写进 Google 日历的旧场次要删掉（9.4）
+  if (festival.googleCalendarSyncedAt) enqueueJob('push_google_calendar', { festival_id: festival.id, action: 'delete' }, user.id)
   updateFestivalRequest(req.id, { avoid, rerollCount: req.rerollCount + 1 })
   const job = enqueueJob('generate_festival', { request_id: req.id, reroll_of: festival.id }, user.id)
   updateFestivalRequest(req.id, { jobId: job.id })
