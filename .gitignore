@@ -1,0 +1,20 @@
+# Data
+data/
+*.db
+*.db-journal
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Node
+node_modules/
+.next/
+dist/
+coverage/
+
+# OS/IDE
+.DS_Store
+.idea/
+.vscode/
