@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { getFilms } from '@/db/repo/library'
-import { latestTasteProfile } from '@/db/repo/taste'
+import { getTasteProfileVersion, latestTasteProfile, listTasteProfileVersions } from '@/db/repo/taste'
 import { requirePageUser } from '@/lib/session'
 import { rebuildDecision } from '@/taste/profile'
 import { RECENCY_LABELS } from '@/taste/recency'
@@ -35,9 +35,13 @@ function Bar({ label, value, hint }: { label: string; value: number; hint: strin
   )
 }
 
-export default async function TastePage() {
+export default async function TastePage({ searchParams }: { searchParams: Promise<{ v?: string }> }) {
   const user = await requirePageUser()
-  const p = latestTasteProfile(user.id)
+  const latest = latestTasteProfile(user.id)
+  const { v } = await searchParams
+  const asked = v && /^\d+$/.test(v) ? getTasteProfileVersion(user.id, Number(v)) : undefined
+  const p = asked ?? latest
+  const versions = listTasteProfileVersions(user.id)
   const decision = rebuildDecision(user.id)
   if (!p) {
     return (
@@ -60,9 +64,27 @@ export default async function TastePage() {
         <div>
           <h1 className="font-serif text-3xl">画像</h1>
           <p className="mt-2 text-sm text-muted">
-            第 {p.version} 版 · 基于 {p.watchLogCount} 部 · {p.createdAt.slice(0, 10)}
-            {decision.needed && ` · ${decision.reason}，点「重建画像」更新`}
+            第 {p.version} 版 · 基于 {p.watchLogCount} 部 · {p.createdAt.slice(0, 10)} · {p.model ? `由 ${p.model} 撰写` : '只有统计层'}
+            {p.version === latest?.version && decision.needed && ` · ${decision.reason}，点「重建画像」更新`}
           </p>
+          {versions.length > 1 && (
+            <p className="mt-1 flex flex-wrap gap-x-3 text-xs text-muted">
+              <span>历史版本：</span>
+              {versions.map((x) => (
+                <Link
+                  key={x.version}
+                  href={x.version === latest?.version ? '/taste' : `/taste?v=${x.version}`}
+                  className={x.version === p.version ? 'text-ink underline' : 'hover:text-ink'}
+                  title={`${x.createdAt.slice(0, 16).replace('T', ' ')}${x.hasMemo ? '' : ' · 只有统计'}`}
+                >
+                  第 {x.version} 版{x.version === latest?.version ? '（最新）' : ''}
+                </Link>
+              ))}
+            </p>
+          )}
+          {p.version !== latest?.version && (
+            <p className="mt-1 text-xs text-accent">这是旧版本，只供对照；策展用的是最新一版。</p>
+          )}
           <p className="mt-1 text-xs text-muted">
             近期权重：{RECENCY_LABELS[stats.recency?.level ?? 'off']}。越早看的记录对画像的影响越小，强烈表态过（喜欢、≥4.5★ 或 ≤2★）的老片保留大部分权重，重看会刷新。
             <Link className="ml-1 underline" href="/settings">

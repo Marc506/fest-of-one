@@ -34,12 +34,14 @@ export const enrichFilmsHandler = defineHandler({
 
     // 豆瓣条目先查 Wikidata：有 TMDB / IMDb 编号就不用模糊匹配，还能拿到年份、认出剧集
     let wikidata = new Map<string, DoubanHint>()
+    let wikidataNote = ''
     const doubanIds = pending.filter((a) => a.provider === 'douban' && !a.tmdbId && !a.imdbIdRaw).map((a) => a.externalId)
     if (doubanIds.length && wikidataEnabled()) {
       progress(2, `查询 Wikidata：${doubanIds.length} 个豆瓣条目…`)
       const r = await doubanHintsFromWikidata(doubanIds, { log: (l) => log(l) })
       wikidata = r.hints
       log(`wikidata: ${r.hints.size}/${doubanIds.length} douban ids known${r.error ? ` (stopped: ${r.error})` : ''}`)
+      wikidataNote = r.error && !r.hints.size ? '；Wikidata 连不上，已跳过' : `；Wikidata 认得其中 ${r.hints.size}/${doubanIds.length} 个豆瓣条目`
     }
 
     let done = 0
@@ -84,7 +86,7 @@ export const enrichFilmsHandler = defineHandler({
     const decision = rebuildDecision(userId)
     const taste = decision.needed ? enqueueJob('build_taste', { force: false }, userId) : null
     const notFilm = outcome.not_film ? `，识别出 ${outcome.not_film} 条剧集等非电影` : ''
-    progress(100, `匹配率 ${(rate * 100).toFixed(1)}%${notFilm}，富化 ${enriched.enriched} 部`)
+    progress(100, `匹配率 ${(rate * 100).toFixed(1)}%${notFilm}，富化 ${enriched.enriched} 部${wikidataNote}`)
     return {
       build_taste_job_id: taste?.id ?? null,
       build_taste_reason: decision.reason,
