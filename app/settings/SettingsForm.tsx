@@ -12,6 +12,7 @@ type Prefs = {
   preferred_start: string | null
   alarm_min: number | null
   recency_weighting?: RecencyLevelT
+  writing_sample?: string
 }
 
 const TZS = ['Asia/Shanghai', 'Asia/Hong_Kong', 'Asia/Taipei', 'Asia/Tokyo', 'Asia/Singapore', 'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'America/New_York', 'America/Chicago', 'America/Los_Angeles', 'Australia/Sydney']
@@ -32,7 +33,7 @@ export function SettingsForm(props: { locale: 'zh-CN' | 'en'; tz: string; prefs:
         setMsg(null)
         const res = await fetch('/api/settings', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ locale, tz, prefs: p }) })
         const body = await res.json()
-        setMsg(res.ok ? (body.taste_rebuild_job_id ? '已保存，正在按新的近期权重重建画像（约一两分钟）' : '已保存') : (body.error?.message ?? '保存失败'))
+        setMsg(res.ok ? (body.taste_rebuild_job_id ? '已保存，正在重建画像（约一两分钟）' : '已保存') : (body.error?.message ?? '保存失败'))
       }}
     >
       <label className="space-y-1">
@@ -106,6 +107,19 @@ export function SettingsForm(props: { locale: 'zh-CN' | 'en'; tz: string; prefs:
         </select>
         <span className="block text-xs text-muted">
           喜欢、打 ≥4.5★ 或 ≤2★ 的老片保留大部分权重；重看会刷新。所有看过的片仍然都会给策展人看、也永远不会被排进影展。修改后自动重建画像（一次 Claude 调用）。
+        </span>
+      </label>
+      <label className="space-y-1 sm:col-span-2">
+        <span className="block text-muted">你自己写的影评或观影笔记（可选）</span>
+        <textarea
+          value={p.writing_sample ?? ''}
+          onChange={(e) => set('writing_sample', e.target.value.slice(0, 8000))}
+          rows={8}
+          placeholder="粘贴几段你写过的东西，长短都行。"
+          className={`w-full ${input} leading-relaxed`}
+        />
+        <span className="block text-xs text-muted">
+          策展人会把它当作你口味最直接的证据，写画像和场刊时也参考它的写法（不会照抄）。豆瓣短评导入时已经自动带上，这里适合放更长的文字。{(p.writing_sample ?? '').length}/8000 字。修改后自动重建画像。
         </span>
       </label>
       <div className="flex items-center gap-3 sm:col-span-2">

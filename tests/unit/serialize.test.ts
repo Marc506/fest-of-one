@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { serializeWatchLog, fullLine, flagsOf } from '@/taste/serialize'
+import { serializeWatchLog, fullLine, flagsOf, REVIEW_BUDGET_CHARS, REVIEW_MAX_CHARS } from '@/taste/serialize'
 import { sortViewerFilms, type ViewerFilm } from '@/taste/viewer'
 
 const vf = (tmdbId: number | null, title: string, year: number | null, o: Partial<ViewerFilm> = {}): ViewerFilm => ({
@@ -77,5 +77,39 @@ describe('watch log serialization (6.3)', () => {
       { key: 't30020', tmdbId: 30020, title: 'Taste of Cherry', year: 1997, directors: ['Abbas Kiarostami'], film: null },
     ])
     expect(s.text).toContain('WATCHLIST: 30020|Taste of Cherry (1997)|Abbas Kiarostami')
+  })
+})
+
+describe("the viewer's own words", () => {
+  it('lists short reviews by tmdb_id, cleaned and cut, and appends the writing sample', () => {
+    const films = sortViewerFilms([
+      vf(843, 'In the Mood for Love', 2000, { review: '雨里的楼梯。\n|旗袍换了二十多次', lastWatched: '2025-01-09' }),
+      vf(6977, 'No Country for Old Men', 2007, { review: '长'.repeat(REVIEW_MAX_CHARS + 50), lastWatched: '2024-03-02' }),
+      vf(25538, 'Yi Yi', 2000, { review: '   ' }),
+    ])
+    const s = serializeWatchLog(films, [], { writingSample: '第一段。\r\n\r\n\r\n\r\n第二段。' })
+    expect(s.text).toContain("## In the viewer's own words (2 short reviews they wrote; quoted as written")
+    expect(s.text).toContain('\n843|In the Mood for Love (2000)|雨里的楼梯。 / 旗袍换了二十多次\n')
+    expect(s.text).toContain(`\n6977|No Country for Old Men (2007)|${'长'.repeat(REVIEW_MAX_CHARS)}…\n`)
+    expect(s.text.indexOf('\n843|In the Mood')).toBeLessThan(s.text.indexOf('\n6977|No Country'))
+    expect(s.text).toContain('## Writing the viewer chose to share (their own reviews or notes, in full)\n第一段。\n\n第二段。')
+    expect(serializeWatchLog(sortViewerFilms([...films].reverse()), [], { writingSample: '第一段。\r\n\r\n\r\n\r\n第二段。' }).hash).toBe(s.hash)
+  })
+
+  it('keeps the total within budget, preferring recent reviews', () => {
+    const n = Math.ceil(REVIEW_BUDGET_CHARS / (REVIEW_MAX_CHARS + 30)) + 10
+    const films = sortViewerFilms(
+      Array.from({ length: n }, (_, i) => vf(1000 + i, `Film ${i}`, 2000, { review: '字'.repeat(REVIEW_MAX_CHARS), lastWatched: `20${String(10 + (i % 15)).padStart(2, '0')}-01-01` })),
+    )
+    const s = serializeWatchLog(films)
+    const section = s.text.split("## In the viewer's own words")[1]!.split('\n## ')[0]!
+    const lines = section.split('\n').filter((l) => /^\d+\|/.test(l))
+    expect(lines.length).toBeLessThan(n)
+    expect(section.length).toBeLessThanOrEqual(REVIEW_BUDGET_CHARS + 200)
+    expect(section).toContain(`most telling of ${n}`)
+    // 留下的都是最近的几年
+    const kept = new Set(lines.map((l) => Number(l.split('|')[0])))
+    expect(kept.has(1000 + 14)).toBe(true) // 2024
+    expect(kept.has(1000)).toBe(false) // 2010
   })
 })

@@ -6,7 +6,8 @@ import { insertTasteProfile } from '@/db/repo/taste'
 import { updateUserSettings, upsertUserByEmail } from '@/db/repo/users'
 import { DEFAULT_PREFS } from '@/db/types'
 import type { Film } from '@/db/schema'
-import { needsRebuild } from '@/taste/profile'
+import * as libraryRepo from '@/db/repo/library'
+import { currentWatchState, needsRebuild } from '@/taste/profile'
 import { recencyAnchor, recencyWeight, RECENCY_PRESETS } from '@/taste/recency'
 import { serializeWatchLog } from '@/taste/serialize'
 import { computeTasteStats } from '@/taste/stats'
@@ -146,5 +147,23 @@ describe('changing the setting', () => {
     updateUserSettings(user.id, { prefs: { ...DEFAULT_PREFS, recency_weighting: 'strong' } })
     const strongLog = serializeWatchLog(films, [], { recency: 'strong' })
     expect(needsRebuild(profile, { films, log: strongLog, recency: 'strong' }, NOW)).toEqual({ needed: true, reason: '近期权重设置变了' })
+  })
+})
+
+describe("viewer's own words from the database", () => {
+  it('uses the latest non-empty review per film and the writing sample from settings', () => {
+    const user = upsertUserByEmail('words@test')
+    const { upsertAlias, upsertWatchEntry, setAliasMatch, insertFilmStub } = libraryRepo
+    insertFilmStub({ tmdbId: 777, titleEn: 'Havoc', originalTitle: 'Havoc', year: 2025 })
+    const a = upsertAlias({ provider: 'douban', externalId: '36000001', titleRaw: '火遮眼' })
+    setAliasMatch(a.id, { status: 'matched', tmdbId: 777, confidence: 1, candidates: null })
+    upsertWatchEntry({ userId: user.id, sourceId: null, aliasId: a.id, tmdbId: 777, provider: 'douban', externalEntryId: 'x1', watchedAt: '2025-04-01', reviewText: '旧的看法' })
+    upsertWatchEntry({ userId: user.id, sourceId: null, aliasId: a.id, tmdbId: 777, provider: 'douban', externalEntryId: 'x2', watchedAt: '2025-06-01', reviewText: '打戏好看，但空间没有参与进来' })
+    upsertWatchEntry({ userId: user.id, sourceId: null, aliasId: a.id, tmdbId: 777, provider: 'douban', externalEntryId: 'x3', watchedAt: '2025-08-01', reviewText: '' })
+    updateUserSettings(user.id, { prefs: { ...DEFAULT_PREFS, writing_sample: '我还想看电影是怎么破坏空间的。' } })
+    const state = currentWatchState(user.id)
+    expect(state.films[0]!.review).toBe('打戏好看，但空间没有参与进来')
+    expect(state.log.text).toContain('777|Havoc (2025)|打戏好看，但空间没有参与进来')
+    expect(state.log.text).toContain('我还想看电影是怎么破坏空间的。')
   })
 })

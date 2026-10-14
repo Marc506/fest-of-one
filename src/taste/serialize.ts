@@ -9,12 +9,19 @@
  *
  * 偏离 6.3：开启近期权重（recency.ts，默认「适中」）时，FULL 行末尾多一列 `|weight`（0–1）。
  * 权重同样以记录内最晚日期为锚点，所以仍然确定性；关闭时格式与 6.3 完全一致。
+ *
+ * 偏离 6.3：TA 自己写的短评（豆瓣短评 / Letterboxd review）单列一段「In the viewer's own words」，
+ * 每条截到 REVIEW_MAX_CHARS、总量不超过 REVIEW_BUDGET_CHARS（超出时按权重、再按观看时间挑，输出仍按 tmdb_id 排序）；
+ * 设置里贴的长文（writing sample）再单列一段。两者都是确定性的。
  */
 import { createHash } from 'node:crypto'
 import { describeRecency, recencyAnchor, recencyWeight, type RecencyLevelT } from './recency'
 import type { ViewerFilm, WatchlistFilm } from './viewer'
 
 export const SPLIT_THRESHOLD = 6000
+export const REVIEW_MAX_CHARS = 300
+export const REVIEW_BUDGET_CHARS = 24_000
+export const WRITING_SAMPLE_MAX_CHARS = 8_000
 
 const clean = (s: string) => s.replace(/[|\r\n]+/g, ' / ').replace(/\s+/g, ' ').trim()
 
@@ -46,10 +53,46 @@ export function indexLine(f: { tmdbId: number | null; title: string; year: numbe
 
 export type SerializedLog = { text: string; lines: number; split: boolean; hash: string }
 
+const cut = (t: string, max: number) => {
+  const chars = [...t]
+  return chars.length > max ? `${chars.slice(0, max).join('')}…` : t
+}
+
+/** 短评段：总量有上限；超出时优先权重高、再看得近的，输出顺序跟随 films（tmdb_id 升序）。 */
+function reviewSection(films: ViewerFilm[], weightOf: (f: ViewerFilm) => number): string[] {
+  const all = films.map((f, i) => ({ f, i, text: f.review ? cut(clean(f.review), REVIEW_MAX_CHARS) : '' })).filter((x) => x.text)
+  if (!all.length) return []
+  const ranked = [...all].sort(
+    (a, b) => weightOf(b.f) - weightOf(a.f) || (b.f.lastWatched ?? '').localeCompare(a.f.lastWatched ?? '') || a.i - b.i,
+  )
+  const keep = new Set<number>()
+  let used = 0
+  for (const r of ranked) {
+    const cost = r.text.length + 30
+    if (used + cost > REVIEW_BUDGET_CHARS) continue
+    used += cost
+    keep.add(r.i)
+  }
+  const shown = all.filter((x) => keep.has(x.i))
+  const scope = shown.length < all.length ? `; the ${shown.length} most telling of ${all.length}` : ''
+  return [
+    '',
+    `## In the viewer's own words (${shown.length} short reviews they wrote${scope}; quoted as written, long ones cut with …)`,
+    'tmdb_id|title (year)|their review',
+    ...shown.map((x) => `${x.f.tmdbId ?? '?'}|${titleYear(x.f)}|${x.text}`),
+  ]
+}
+
+function writingSection(sample: string | null | undefined): string[] {
+  const text = (sample ?? '').replace(/\r\n?/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+  if (!text) return []
+  return ['', '## Writing the viewer chose to share (their own reviews or notes, in full)', cut(text, WRITING_SAMPLE_MAX_CHARS)]
+}
+
 export function serializeWatchLog(
   films: ViewerFilm[],
   watchlist: WatchlistFilm[] = [],
-  opts: { splitThreshold?: number; recency?: RecencyLevelT; nonFilm?: ViewerFilm[] } = {},
+  opts: { splitThreshold?: number; recency?: RecencyLevelT; nonFilm?: ViewerFilm[]; writingSample?: string | null } = {},
 ): SerializedLog {
   const threshold = opts.splitThreshold ?? SPLIT_THRESHOLD
   const recency = opts.recency ?? 'off'
@@ -78,6 +121,8 @@ export function serializeWatchLog(
       ...index.map(indexLine),
     )
   }
+  out.push(...reviewSection(films, (f) => (weighting ? recencyWeight(f, recencyAt, recency) : 1)))
+  out.push(...writingSection(opts.writingSample))
   if (opts.nonFilm?.length) {
     // 剧集 / 综艺等：不是电影、也不会被排片，只留标题，让策展人知道 TA 还看这些
     out.push('', `## Also logged, not films (${opts.nonFilm.length} TV series, variety shows, stage recordings…; titles only)`)

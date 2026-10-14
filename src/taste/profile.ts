@@ -25,8 +25,9 @@ export function currentWatchState(userId: string): WatchState {
   const films = all.filter((f) => !f.nonFilm)
   const nonFilm = all.filter((f) => f.nonFilm)
   const watchlist = loadWatchlist(userId)
-  const recency = recencyOf(getUser(userId)?.prefs)
-  return { films, nonFilm, watchlist, recency, log: serializeWatchLog(films, watchlist, { recency, nonFilm }) }
+  const prefs = getUser(userId)?.prefs
+  const recency = recencyOf(prefs)
+  return { films, nonFilm, watchlist, recency, log: serializeWatchLog(films, watchlist, { recency, nonFilm, writingSample: prefs?.writing_sample }) }
 }
 
 export function needsRebuild(

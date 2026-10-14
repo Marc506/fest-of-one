@@ -24,6 +24,8 @@ export type ViewerFilm = {
   film: Film | null
   /** 剧集 / 综艺等（alias.match_status = not_film）：不算电影，单独列给策展人 */
   nonFilm?: boolean
+  /** TA 自己写的短评（最近一条非空的） */
+  review?: string | null
 }
 
 export type WatchlistFilm = { key: string; tmdbId: number | null; title: string; year: number | null; directors: string[]; film: Film | null }
@@ -43,6 +45,7 @@ export function loadViewerFilms(userId: string): ViewerFilm[] {
       titleRaw: filmAliases.titleRaw,
       yearRaw: filmAliases.yearRaw,
       matchStatus: filmAliases.matchStatus,
+      reviewText: watchLog.reviewText,
     })
     .from(watchLog)
     .innerJoin(filmAliases, eq(filmAliases.id, watchLog.aliasId))
@@ -82,6 +85,7 @@ export function loadViewerFilms(userId: string): ViewerFilm[] {
       lastWatched: dated[0] ?? null,
       film,
       ...(first.tmdbId == null && g.every((r) => r.matchStatus === 'not_film') ? { nonFilm: true } : {}),
+      review: sorted.find((r) => r.reviewText?.trim())?.reviewText?.trim() ?? null,
     })
   }
   return sortViewerFilms(out)

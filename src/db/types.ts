@@ -18,6 +18,8 @@ export const UserPrefsSchema = z.object({
   alarm_min: z.number().int().min(0).max(1440).nullable(),
   /** 近期权重：越早看的记录权重越低。旧用户的 prefs 里没有这一项 → 用 recencyOf() 读 */
   recency_weighting: z.enum(RECENCY_LEVELS).optional(),
+  /** TA 自己写的影评 / 笔记（可选）：策展人当作口味证据，也参考它的写法 */
+  writing_sample: z.string().max(8000).optional(),
 })
 export type UserPrefs = z.infer<typeof UserPrefsSchema>
 

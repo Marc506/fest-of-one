@@ -4,7 +4,7 @@ import { updateUserSettings } from '@/db/repo/users'
 import { recencyOf, UserPrefsSchema } from '@/db/types'
 import { enqueueJob } from '@/jobs/queue'
 import { parseJson, requireApiUser, route } from '@/lib/api'
-import { rebuildDecision } from '@/taste/profile'
+import { currentWatchState } from '@/taste/profile'
 
 const Body = z.object({
   locale: z.enum(['zh-CN', 'en']).optional(),
@@ -31,9 +31,11 @@ export const PUT = route(async (req) => {
   const user = await requireApiUser()
   const body = await parseJson(req, Body)
   const u = updateUserSettings(user.id, body)
-  // 近期权重变了 → 按新权重重建画像（策展时的观影记录序列化立即生效，备忘与统计要重建）
+  // 近期权重或写作样本变了 → 重建画像（策展时的观影记录序列化立即生效，备忘与统计要重建）
+  const changed =
+    recencyOf(u.prefs) !== recencyOf(user.prefs) || (u.prefs.writing_sample ?? '').trim() !== (user.prefs.writing_sample ?? '').trim()
   let rebuild: string | null = null
-  if (recencyOf(u.prefs) !== recencyOf(user.prefs) && rebuildDecision(u.id).needed) {
+  if (changed && currentWatchState(u.id).films.length) {
     rebuild = enqueueJob('build_taste', { force: true }, u.id).id
   }
   return NextResponse.json({ locale: u.locale, tz: u.tz, prefs: u.prefs, taste_rebuild_job_id: rebuild })
