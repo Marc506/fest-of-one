@@ -20,7 +20,8 @@
     "test": "vitest run",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "start:all": "node scripts/start-all.mjs"
+    "start:all": "node scripts/start-all.mjs",
+    "diagnose": "tsx scripts/diagnose.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",
@@ -40,6 +41,7 @@
     "react-dom": "^19.3.0",
     "read-excel-file": "^9.3.12",
     "tsx": "^4.23.15",
+    "undici": "^7.30.0",
     "zod": "^4.6.7"
   },
   "pnpm": {

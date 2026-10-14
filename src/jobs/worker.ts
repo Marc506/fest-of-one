@@ -18,6 +18,7 @@ import {
 } from '@/db/repo/jobs'
 import { runMigrations } from '@/db/migrate'
 import type { Job } from '@/db/schema'
+import { explainError } from '@/lib/net-errors'
 import { sleep } from '@/lib/time'
 import { enqueueDueRssSyncs } from '@/sources/schedule'
 import { handlers } from './handlers'
@@ -37,6 +38,9 @@ function isRetryable(err: unknown): boolean {
 }
 
 function errorMessage(err: unknown): string {
+  // Claude API 连不上 / 密钥不对：给出能照着做的说明
+  const name = (err as { name?: string })?.name ?? ''
+  if (/^(APIConnectionError|APIConnectionTimeoutError|AuthenticationError|PermissionDeniedError)$/.test(name)) return explainError(err, 'Claude API')
   if (err instanceof Error) return err.message
   return String(err)
 }

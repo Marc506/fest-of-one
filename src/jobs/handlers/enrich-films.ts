@@ -6,7 +6,8 @@ import { getTmdbClient } from '@/resolver/tmdb'
 import { mapLimit } from '@/lib/http'
 import { rebuildDecision } from '@/taste/profile'
 import { enqueueJob } from '../queue'
-import { defineHandler, RetryableError, UserFacingError } from '../types'
+import { explainError } from '@/lib/net-errors'
+import { defineHandler, UserFacingError } from '../types'
 
 /** 解析未匹配条目 + 富化影片（5.4 / 5.5）。 */
 export const enrichFilmsHandler = defineHandler({
@@ -15,12 +16,23 @@ export const enrichFilmsHandler = defineHandler({
     if (!userId) throw new UserFacingError('enrich_films 需要 user_id')
     const client = getTmdbClient()
 
+    // 先试一次：TMDB 连不上 / 令牌不对时几秒内就失败并说明原因，而不是逐条重试几个小时
+    progress(1, '检查 TMDB 连接…')
+    try {
+      await client.movieGenres()
+    } catch (err) {
+      throw new UserFacingError(explainError(err, 'TMDB'))
+    }
+
     const pending = pendingAliasesForUser(userId)
     let done = 0
     let errors = 0
+    let firstError: unknown
     const outcome = { matched: 0, ambiguous: 0, unmatched: 0 }
-    progress(1, `匹配 TMDB：0/${pending.length}`)
+    progress(2, `匹配 TMDB：0/${pending.length}`)
+    const abort = new AbortController()
     await mapLimit(pending, 4, async (alias) => {
+      if (abort.signal.aborted) return
       try {
         const r = await resolveAlias(alias, client)
         if (r.status === 'matched' || r.status === 'confirmed') outcome.matched++
@@ -28,12 +40,17 @@ export const enrichFilmsHandler = defineHandler({
         else if (r.status === 'unmatched') outcome.unmatched++
       } catch (err) {
         errors++
-        log(`resolve alias ${alias.id} failed:`, err instanceof Error ? err.message : err)
+        firstError ??= err
+        log(`resolve alias ${alias.id} failed:`, explainError(err, 'TMDB'))
+        // 开头 20 条全失败 → 不再硬撑
+        if (errors >= 20 && errors === done + 1) abort.abort()
       }
       done++
-      if (done % 10 === 0 || done === pending.length) progress(1 + (done / pending.length) * 59, `匹配 TMDB：${done}/${pending.length}`)
+      if (done % 10 === 0 || done === pending.length) progress(2 + (done / pending.length) * 58, `匹配 TMDB：${done}/${pending.length}`)
     })
-    if (pending.length && errors === pending.length) throw new RetryableError('TMDB 全部请求失败，稍后重试')
+    if (abort.signal.aborted || (pending.length && errors === pending.length)) {
+      throw new UserFacingError(`匹配 TMDB 失败：${explainError(firstError, 'TMDB')}（修好后在「接入观影记录」里点「重新同步」即可，已导入的记录不会重复）`)
+    }
 
     const ids = filmsNeedingEnrichment(userId, staleBefore())
     progress(60, `富化影片：0/${ids.length}`)

@@ -97,8 +97,9 @@ export class HttpTmdbClient implements TmdbClient {
   constructor(
     private readonly token: string,
     fetchImpl?: FetchLike,
+    opts: { retries?: number } = {},
   ) {
-    this.f = createRateLimitedFetch({ concurrency: 4, retries: 5, fetchImpl })
+    this.f = createRateLimitedFetch({ concurrency: 4, retries: opts.retries ?? 5, fetchImpl })
   }
 
   private async get<T>(path: string, params: Record<string, string | number | boolean | undefined | null> = {}): Promise<T> {
@@ -172,6 +173,10 @@ export class HttpTmdbClient implements TmdbClient {
   movieGenres() {
     this.genreCache ??= this.get<{ genres: { id: number; name: string }[] }>('/genre/movie/list', { language: 'en-US' }).then(
       (r) => r.genres,
+      (err) => {
+        this.genreCache = undefined // 失败不缓存
+        throw err
+      },
     )
     return this.genreCache
   }

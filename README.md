@@ -12,7 +12,11 @@ cp .env.example .env        # 填 AUTH_SECRET；本地可 DEV_LOGIN=1
 pnpm db:migrate
 pnpm dev                    # web  → http://localhost:3000
 pnpm worker                 # 另开终端：后台任务
+pnpm diagnose               # 自检 .env / 数据库 / TMDB / Claude API 连通性（只读，不花钱）
 ```
+
+在中国大陆：Node 不走系统代理，TMDB 与 Claude API 需要在 `.env` 里设 `HTTPS_PROXY=http://127.0.0.1:7890`
+（端口换成代理软件的 HTTP 代理端口），然后重启 `pnpm dev` 与 `pnpm worker`。注意 `pnpm doctor` 是 pnpm 自带命令，自检请用 `pnpm diagnose`。
 
 `DEV_LOGIN=1` 时首页有「开发登录」，或直接访问 `/api/auth/dev`，以 `dev@local` 登录。
 
@@ -158,3 +162,10 @@ docker compose up -d --build   # web + worker 两个容器，SQLite 在 ./data
   不需要 Cookie，主页需公开）导出的 `影视.csv` 列为 `title, url, date, rating, status, comment`，评分是 `★`–`★★★★★`——已支持。
 - 这份 CSV **没有年份**，匹配只能靠中文片名 + 热度；同名片会进「待确认」。`影视.csv` 里也有电视剧，TMDB 电影库匹配不上，会留在「待确认」，可以忽略。
 - 豆瓣网页现在有 PoW 验证，Cookie 抓取多半会被拦（应用会立刻停下并提示改用上传）。
+
+### TMDB 连不上时（M7 之后补充）
+
+- 出站请求支持 `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY`（`undici` 的 `EnvHttpProxyAgent` 设为全局 dispatcher；web 进程经 `instrumentation.ts`，worker / CLI 经 `load-env`）。
+- `enrich_films` 先请求一次 genre 列表做预检：连不上或令牌错误时几秒内失败，并在页面上说明原因（网络 → 设代理；401 → 检查 Read Access Token），
+  不再进入「逐条重试 → 整体重排队」。逐条匹配时若开头 20 条全部失败也会立刻停下。修好后点「重新同步」即可，导入幂等。
+- 偏离：原先全部失败时抛 `RetryableError` 让 job 重排队一次；连不上是配置问题，重跑只会浪费时间，改为 `UserFacingError` 直接失败。
