@@ -11,7 +11,7 @@
  * 权重同样以记录内最晚日期为锚点，所以仍然确定性；关闭时格式与 6.3 完全一致。
  *
  * 偏离 6.3：TA 自己写的短评（豆瓣短评 / Letterboxd review）单列一段「In the viewer's own words」，
- * 每条截到 REVIEW_MAX_CHARS、总量不超过 REVIEW_BUDGET_CHARS（超出时按权重、再按观看时间挑，输出仍按 tmdb_id 排序）；
+ * 每条截到 REVIEW_MAX_CHARS、总量不超过 REVIEW_BUDGET_CHARS（超出时按观看年份均匀地挑，不偏向近期；输出仍按 tmdb_id 排序）；
  * 设置里贴的长文（writing sample）再单列一段。两者都是确定性的。
  */
 import { createHash } from 'node:crypto'
@@ -60,23 +60,44 @@ const cut = (t: string, max: number) => {
   return chars.length > max ? `${chars.slice(0, max).join('')}…` : t
 }
 
-/** 短评段：总量有上限；超出时优先权重高、再看得近的，输出顺序跟随 films（tmdb_id 升序）。 */
-function reviewSection(films: ViewerFilm[], weightOf: (f: ViewerFilm) => number, zh: boolean): string[] {
+/** 短评的信息量：表态鲜明（喜欢 / ≥9 / ≤4）> 8 分或 5 分以下 > 其余；同档里越长越有内容。 */
+function reviewStrength(f: ViewerFilm): number {
+  if (f.liked || (f.rating10 != null && (f.rating10 >= 9 || f.rating10 <= 4))) return 2
+  if (f.rating10 != null && (f.rating10 === 8 || f.rating10 <= 5)) return 1
+  return 0
+}
+
+/**
+ * 短评段：总量有上限。超出时按「观看年份」轮流挑（每轮每年一条），年内先挑表态鲜明、写得长的——
+ * 早年的短评和近期的一样有机会进来，策展人不会只看到最近几个月的话。输出顺序跟随 films（tmdb_id 升序）。
+ */
+function reviewSection(films: ViewerFilm[], zh: boolean): string[] {
   const all = films.map((f, i) => ({ f, i, text: f.review ? cut(clean(f.review), REVIEW_MAX_CHARS) : '' })).filter((x) => x.text)
   if (!all.length) return []
-  const ranked = [...all].sort(
-    (a, b) => weightOf(b.f) - weightOf(a.f) || (b.f.lastWatched ?? '').localeCompare(a.f.lastWatched ?? '') || a.i - b.i,
-  )
+  const byYear = new Map<string, typeof all>()
+  for (const x of all) {
+    const y = x.f.lastWatched?.slice(0, 4) ?? '????'
+    const list = byYear.get(y) ?? []
+    list.push(x)
+    byYear.set(y, list)
+  }
+  const queues = [...byYear.entries()]
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([, xs]) => xs.sort((a, b) => reviewStrength(b.f) - reviewStrength(a.f) || b.text.length - a.text.length || a.i - b.i))
   const keep = new Set<number>()
   let used = 0
-  for (const r of ranked) {
-    const cost = r.text.length + 30
-    if (used + cost > REVIEW_BUDGET_CHARS) continue
-    used += cost
-    keep.add(r.i)
+  for (let round = 0; queues.some((q) => q.length > round); round++) {
+    for (const q of queues) {
+      const x = q[round]
+      if (!x) continue
+      const cost = x.text.length + 30
+      if (used + cost > REVIEW_BUDGET_CHARS) continue
+      used += cost
+      keep.add(x.i)
+    }
   }
   const shown = all.filter((x) => keep.has(x.i))
-  const scope = shown.length < all.length ? `; the ${shown.length} most telling of ${all.length}` : ''
+  const scope = shown.length < all.length ? `; ${shown.length} of ${all.length}, chosen evenly across the years` : ''
   return [
     '',
     `## In the viewer's own words (${shown.length} short reviews they wrote${scope}; quoted as written, long ones cut with …)`,
@@ -124,7 +145,7 @@ export function serializeWatchLog(
       ...index.map((f) => indexLine(f, zh)),
     )
   }
-  out.push(...reviewSection(films, (f) => (weighting ? recencyWeight(f, recencyAt, recency) : 1), zh))
+  out.push(...reviewSection(films, zh))
   out.push(...writingSection(opts.writingSample))
   if (opts.nonFilm?.length) {
     // 剧集 / 综艺等：不是电影、也不会被排片，只留标题，让策展人知道 TA 还看这些

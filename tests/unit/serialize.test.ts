@@ -96,20 +96,28 @@ describe("the viewer's own words", () => {
     expect(serializeWatchLog(sortViewerFilms([...films].reverse()), [], { writingSample: '第一段。\r\n\r\n\r\n\r\n第二段。' }).hash).toBe(s.hash)
   })
 
-  it('keeps the total within budget, preferring recent reviews', () => {
-    const n = Math.ceil(REVIEW_BUDGET_CHARS / (REVIEW_MAX_CHARS + 30)) + 10
+  it('keeps the total within budget and spreads the reviews across the years', () => {
+    const n = Math.ceil(REVIEW_BUDGET_CHARS / (REVIEW_MAX_CHARS + 30)) + 40
     const films = sortViewerFilms(
-      Array.from({ length: n }, (_, i) => vf(1000 + i, `Film ${i}`, 2000, { review: '字'.repeat(REVIEW_MAX_CHARS), lastWatched: `20${String(10 + (i % 15)).padStart(2, '0')}-01-01` })),
+      Array.from({ length: n }, (_, i) =>
+        vf(1000 + i, `Film ${i}`, 2000, {
+          review: '字'.repeat(REVIEW_MAX_CHARS),
+          // 大部分是最近一年写的，早年只有少数几条
+          lastWatched: i < 15 ? `20${String(10 + i)}-01-01` : '2026-01-01',
+          rating10: i === 20 ? 10 : 6,
+        }),
+      ),
     )
     const s = serializeWatchLog(films)
     const section = s.text.split("## In the viewer's own words")[1]!.split('\n## ')[0]!
     const lines = section.split('\n').filter((l) => /^\d+\|/.test(l))
     expect(lines.length).toBeLessThan(n)
     expect(section.length).toBeLessThanOrEqual(REVIEW_BUDGET_CHARS + 200)
-    expect(section).toContain(`most telling of ${n}`)
-    // 留下的都是最近的几年
+    expect(section).toContain(`of ${n}, chosen evenly across the years`)
     const kept = new Set(lines.map((l) => Number(l.split('|')[0])))
-    expect(kept.has(1000 + 14)).toBe(true) // 2024
-    expect(kept.has(1000)).toBe(false) // 2010
+    // 每个早年的短评都在，最近一年里表态鲜明的那条优先
+    for (let i = 0; i < 15; i++) expect(kept.has(1000 + i)).toBe(true)
+    expect(kept.has(1020)).toBe(true)
   })
+
 })
