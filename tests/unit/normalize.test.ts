@@ -5,7 +5,8 @@ describe('normalize', () => {
   it('lowercases, strips punctuation and diacritics, folds full-width', () => {
     expect(normalizeTitle('Amélie!')).toBe('amelie')
     expect(normalizeTitle('ＡＢＣ　１２３')).toBe('abc 123')
-    expect(normalizeTitle('花樣年華：導演版')).toBe('花樣年華 導演版')
+    expect(normalizeTitle('花樣年華：導演版')).toBe('花样年华 导演版') // 繁 → 简
+    expect(titleSim('牯岭街少年杀人事件', '牯嶺街少年殺人事件')).toBe(1)
     expect(normalizeTitle('Crouching Tiger, Hidden Dragon')).toBe('crouching tiger hidden dragon')
   })
   it('scores title similarity', () => {

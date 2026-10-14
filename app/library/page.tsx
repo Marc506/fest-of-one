@@ -1,9 +1,10 @@
 import Link from 'next/link'
-import { libraryCounts, listLibrary, unresolvedAliasesForUser } from '@/db/repo/library'
+import { libraryCounts, listLibrary, notFilmAliasesForUser, unresolvedAliasesForUser } from '@/db/repo/library'
 import { requirePageUser } from '@/lib/session'
 import { Poster } from '../_components/Poster'
 import { Badge } from '../_components/ui'
 import { ManualAdd } from './ManualAdd'
+import { NotFilmList, RematchButton } from './PendingTools'
 import { ResolveRow } from './ResolveRow'
 
 export const dynamic = 'force-dynamic'
@@ -125,10 +126,24 @@ function Records({ userId, sp }: { userId: string; sp: Awaited<SP> }) {
 
 function Pending({ userId }: { userId: string }) {
   const aliases = unresolvedAliasesForUser(userId)
-  if (!aliases.length) return <p className="py-12 text-center text-muted">没有待确认的条目。</p>
+  const notFilm = notFilmAliasesForUser(userId).map((a) => ({ id: a.id, titleRaw: a.titleRaw, provider: a.provider }))
+  if (!aliases.length)
+    return (
+      <div className="space-y-6">
+        <p className="py-12 text-center text-muted">没有待确认的条目。</p>
+        <NotFilmList items={notFilm} />
+      </div>
+    )
   return (
-    <div>
-      <p className="text-sm text-muted">这些条目没能自动对上 TMDB。点候选确认，或搜索正确的那一部；确认后不会再被自动覆盖。</p>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <p className="max-w-xl text-sm text-muted">
+          这些条目没能自动对上 TMDB。点候选确认，或搜索正确的那一部；确认后不会再被自动覆盖。剧集、综艺之类点「不是电影」。
+          匹配规则更新后，可以先让它们重新匹配一遍（会先查 Wikidata 上的豆瓣编号，再查 TMDB 的剧集库和港台译名）。
+        </p>
+        <RematchButton count={aliases.length} />
+      </div>
+      <NotFilmList items={notFilm} />
       <ul className="divide-y divide-rule">
         {aliases.map((a) => (
           <ResolveRow

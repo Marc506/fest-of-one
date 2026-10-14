@@ -1,11 +1,16 @@
-/** 标题规范化与相似度（5.4）：小写、去标点、全半角统一、去变音符号。 */
+/** 标题规范化与相似度（5.4）：小写、去标点、全半角统一、去变音符号、繁体转简体。 */
+import { Converter } from 'opencc-js/t2cn'
 
 const COMBINING = /[̀-ͯ]/g
 // 标点与符号（含中文标点），保留字母、数字、CJK 与空白
 const PUNCT = /[\p{P}\p{S}]+/gu
 
+// 港台片在 TMDB 上常常只有繁体原名，豆瓣用简体：比较前统一成简体
+const toSimplified = Converter({ from: 't', to: 'cn' })
+const HAN = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/
+
 export function normalizeTitle(s: string): string {
-  return s
+  return (HAN.test(s) ? toSimplified(s) : s)
     .normalize('NFKC') // 全角 → 半角
     .normalize('NFD')
     .replace(COMBINING, '')

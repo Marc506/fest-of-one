@@ -1,6 +1,6 @@
 /**
  * 自检：`pnpm diagnose`
- * 检查 .env、代理、TMDB（令牌 + 中文片名搜索）、Claude API（免费的模型列表请求）、数据库。只读，不花钱。
+ * 检查 .env、代理、TMDB（令牌 + 中文片名搜索）、Wikidata（豆瓣编号查询）、Claude API（免费的模型列表请求）、数据库。只读，不花钱。
  */
 import '@/lib/load-env'
 import Anthropic from '@anthropic-ai/sdk'
@@ -10,6 +10,7 @@ import { explainError } from '@/lib/net-errors'
 import { maskProxy, proxyUrl } from '@/lib/proxy'
 import { MODEL } from '@/llm/client'
 import { HttpTmdbClient } from '@/resolver/tmdb'
+import { doubanHintsFromWikidata, wikidataEnabled } from '@/resolver/wikidata'
 
 const ok = (s: string) => console.log(`\x1b[32m✓\x1b[0m ${s}`)
 const bad = (s: string) => console.log(`\x1b[31m✗\x1b[0m ${s}`)
@@ -75,7 +76,16 @@ async function main() {
     }
   }
 
-  // 4. Claude API（列模型，不产生费用）
+  // 4. Wikidata（豆瓣编号 → TMDB；可选，连不上只影响豆瓣匹配率）
+  if (wikidataEnabled()) {
+    const r = await doubanHintsFromWikidata(['1292052'], { timeoutMs: 20_000 })
+    const h = r.hints.get('1292052')
+    if (h?.tmdbMovie) ok(`Wikidata 可用：豆瓣 1292052（肖申克的救赎）→ TMDB ${h.tmdbMovie}`)
+    else if (r.error) info(`Wikidata 连不上（${r.error}）：不影响使用，豆瓣条目会只靠 TMDB 搜索匹配`)
+    else info('Wikidata 能连上，但没查到测试条目：豆瓣条目会只靠 TMDB 搜索匹配')
+  }
+
+  // 5. Claude API（列模型，不产生费用）
   if (e.ANTHROPIC_API_KEY) {
     try {
       const client = new Anthropic({ maxRetries: 0, timeout: 20_000 })

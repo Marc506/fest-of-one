@@ -17,13 +17,16 @@ import { loadViewerFilms, loadWatchlist, type ViewerFilm, type WatchlistFilm } f
 export const REBUILD_MIN_NEW = 20
 export const REBUILD_MAX_AGE_DAYS = 30
 
-export type WatchState = { films: ViewerFilm[]; watchlist: WatchlistFilm[]; log: SerializedLog; recency: RecencyLevelT }
+/** films 只含电影；剧集等非电影条目在 nonFilm 里，单独序列化（不进统计）。 */
+export type WatchState = { films: ViewerFilm[]; nonFilm: ViewerFilm[]; watchlist: WatchlistFilm[]; log: SerializedLog; recency: RecencyLevelT }
 
 export function currentWatchState(userId: string): WatchState {
-  const films = loadViewerFilms(userId)
+  const all = loadViewerFilms(userId)
+  const films = all.filter((f) => !f.nonFilm)
+  const nonFilm = all.filter((f) => f.nonFilm)
   const watchlist = loadWatchlist(userId)
   const recency = recencyOf(getUser(userId)?.prefs)
-  return { films, watchlist, recency, log: serializeWatchLog(films, watchlist, { recency }) }
+  return { films, nonFilm, watchlist, recency, log: serializeWatchLog(films, watchlist, { recency, nonFilm }) }
 }
 
 export function needsRebuild(

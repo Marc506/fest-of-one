@@ -28,6 +28,16 @@ export function ResolveRow({
     if (!res.ok) setErr((await res.json()).error?.message ?? '失败')
     else router.refresh()
   }
+  const markNotFilm = async (id: number, notFilm: boolean) => {
+    setErr(null)
+    const res = await fetch('/api/library/not-film', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ alias_id: id, not_film: notFilm }),
+    })
+    if (!res.ok) setErr((await res.json()).error?.message ?? '失败')
+    else router.refresh()
+  }
   return (
     <li className="space-y-2 py-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -59,9 +69,14 @@ export function ResolveRow({
           ))}
         </ul>
       )}
-      <button className="text-xs text-muted underline" onClick={() => setOpen((v) => !v)}>
-        {open ? '收起' : '都不是？搜索 TMDB'}
-      </button>
+      <div className="flex flex-wrap gap-4">
+        <button className="text-xs text-muted underline" onClick={() => setOpen((v) => !v)}>
+          {open ? '收起' : '都不是？搜索 TMDB'}
+        </button>
+        <button className="text-xs text-muted underline" disabled={busy !== null} onClick={() => markNotFilm(alias.id, true)}>
+          不是电影（剧集 / 综艺 / 舞台录像…）
+        </button>
+      </div>
       {open && (
         <TmdbSearch
           initialQuery={alias.titleRaw.split(' / ').at(-1) ?? alias.titleRaw}

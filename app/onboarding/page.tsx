@@ -1,4 +1,5 @@
-import { libraryCounts, matchStats } from '@/db/repo/library'
+import Link from 'next/link'
+import { libraryCounts, matchRate, matchStats } from '@/db/repo/library'
 import { listSources } from '@/db/repo/sources'
 import { requirePageUser } from '@/lib/session'
 import { Badge, Card, fmtDate } from '../_components/ui'
@@ -15,9 +16,8 @@ export default async function OnboardingPage() {
   const user = await requirePageUser()
   const sources = listSources(user.id)
   const counts = libraryCounts(user.id)
-  const ms = matchStats(user.id)
-  const total = Object.values(ms).reduce((a, b) => a + b, 0)
-  const rate = total ? ((ms.matched + ms.confirmed) / total) * 100 : null
+  const r = matchRate(matchStats(user.id))
+  const rate = r == null ? null : r * 100
 
   return (
     <div className="space-y-8">
@@ -26,6 +26,15 @@ export default async function OnboardingPage() {
         <p className="mt-2 text-muted">
           策展人要读完你看过的每一部片。目前片库：{counts.films} 部 · {counts.entries} 条记录 · 想看 {counts.watchlist}
           {rate !== null && ` · TMDB 匹配率 ${rate.toFixed(1)}%`}
+          {counts.unresolved > 0 && (
+            <>
+              {' · '}
+              <Link className="underline" href="/library?tab=pending">
+                待确认 {counts.unresolved}
+              </Link>
+            </>
+          )}
+          {counts.notFilm > 0 && ` · 剧集等非电影 ${counts.notFilm}（已跳过）`}
         </p>
       </header>
 

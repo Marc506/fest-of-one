@@ -2,7 +2,7 @@
  * 把用户的 watch_log / watchlist 聚合成「每部片一行」的视图（同一 tmdb_id 跨来源合并）。
  * 统计层与序列化共用；输出顺序确定（tmdb_id 升序，未匹配的排最后按标题）。
  */
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, eq, ne } from 'drizzle-orm'
 import { getDb } from '@/db/client'
 import { getFilms } from '@/db/repo/library'
 import { filmAliases, watchLog, watchlist, type Film } from '@/db/schema'
@@ -22,6 +22,8 @@ export type ViewerFilm = {
   /** YYYY-MM-DD（watched_at，缺失时退回 logged_at） */
   lastWatched: string | null
   film: Film | null
+  /** 剧集 / 综艺等（alias.match_status = not_film）：不算电影，单独列给策展人 */
+  nonFilm?: boolean
 }
 
 export type WatchlistFilm = { key: string; tmdbId: number | null; title: string; year: number | null; directors: string[]; film: Film | null }
@@ -40,6 +42,7 @@ export function loadViewerFilms(userId: string): ViewerFilm[] {
       rewatch: watchLog.rewatch,
       titleRaw: filmAliases.titleRaw,
       yearRaw: filmAliases.yearRaw,
+      matchStatus: filmAliases.matchStatus,
     })
     .from(watchLog)
     .innerJoin(filmAliases, eq(filmAliases.id, watchLog.aliasId))
@@ -78,6 +81,7 @@ export function loadViewerFilms(userId: string): ViewerFilm[] {
       views: Math.max(1, new Set(g.map((r) => r.watchedAt).filter(Boolean)).size),
       lastWatched: dated[0] ?? null,
       film,
+      ...(first.tmdbId == null && g.every((r) => r.matchStatus === 'not_film') ? { nonFilm: true } : {}),
     })
   }
   return sortViewerFilms(out)
@@ -98,7 +102,7 @@ export function loadWatchlist(userId: string): WatchlistFilm[] {
     .select({ aliasId: watchlist.aliasId, tmdbId: watchlist.tmdbId, titleRaw: filmAliases.titleRaw, yearRaw: filmAliases.yearRaw })
     .from(watchlist)
     .innerJoin(filmAliases, eq(filmAliases.id, watchlist.aliasId))
-    .where(and(eq(watchlist.userId, userId)))
+    .where(and(eq(watchlist.userId, userId), ne(filmAliases.matchStatus, 'not_film')))
     .all()
   const films = new Map(getFilms([...new Set(rows.map((r) => r.tmdbId).filter((x): x is number => x != null))]).map((f) => [f.tmdbId, f]))
   const seen = new Set<string>()

@@ -49,7 +49,7 @@ export type SerializedLog = { text: string; lines: number; split: boolean; hash:
 export function serializeWatchLog(
   films: ViewerFilm[],
   watchlist: WatchlistFilm[] = [],
-  opts: { splitThreshold?: number; recency?: RecencyLevelT } = {},
+  opts: { splitThreshold?: number; recency?: RecencyLevelT; nonFilm?: ViewerFilm[] } = {},
 ): SerializedLog {
   const threshold = opts.splitThreshold ?? SPLIT_THRESHOLD
   const recency = opts.recency ?? 'off'
@@ -77,6 +77,11 @@ export function serializeWatchLog(
       `### INDEX (seen, unrated; tmdb_id|title (year) only)`,
       ...index.map(indexLine),
     )
+  }
+  if (opts.nonFilm?.length) {
+    // 剧集 / 综艺等：不是电影、也不会被排片，只留标题，让策展人知道 TA 还看这些
+    out.push('', `## Also logged, not films (${opts.nonFilm.length} TV series, variety shows, stage recordings…; titles only)`)
+    out.push(opts.nonFilm.map((f) => clean(f.title)).join(' · '))
   }
   out.push('', `## Watchlist (${watchlist.length} films they have said they want to see; may be programmed, not required)`, 'WATCHLIST: tmdb_id|title (year)|directors')
   for (const w of watchlist) out.push(`WATCHLIST: ${indexLine(w)}|${w.directors.map(clean).join(' & ') || '-'}`)

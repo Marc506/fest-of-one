@@ -11,6 +11,7 @@ process.env.UPLOAD_DIR = mkdtempSync(join(tmpdir(), 'fest-uploads-'))
 // 测试里绝不打真实外部 API
 delete process.env.ANTHROPIC_API_KEY
 delete process.env.TMDB_READ_TOKEN
+process.env.WIKIDATA_LOOKUP = '0'
 
 /** 每个测试一个全新的内存库。 */
 beforeEach(() => {

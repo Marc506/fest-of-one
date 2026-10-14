@@ -53,6 +53,16 @@ export type TmdbMovieDetails = {
 
 export type TmdbPerson = { id: number; name: string; known_for_department: string; popularity: number }
 
+/** 剧集搜索结果（只用来识别「这是电视剧，不是电影」）。 */
+export type TmdbTvSummary = {
+  id: number
+  name: string
+  original_name: string
+  first_air_date: string | null
+  popularity: number
+  vote_count: number
+}
+
 export type TmdbPersonCredits = {
   cast: (TmdbMovieSummary & { character: string | null })[]
   crew: (TmdbMovieSummary & { job: string })[]
@@ -78,6 +88,9 @@ export interface TmdbClient {
   discoverMovies(params: TmdbDiscoverParams): Promise<TmdbMovieSummary[]>
   searchKeyword(query: string): Promise<{ id: number; name: string }[]>
   movieGenres(): Promise<{ id: number; name: string }[]>
+  searchTv(query: string, opts: { language: TmdbLang }): Promise<TmdbTvSummary[]>
+  /** 一部片在 TMDB 上的全部别名与各语言译名（港台译名、旧译名…），给匹配打分用。 */
+  movieAltTitles(id: number): Promise<string[]>
 }
 
 export function yearOf(date: string | null | undefined): number | null {
@@ -170,6 +183,28 @@ export class HttpTmdbClient implements TmdbClient {
     return r.results
   }
 
+  async searchTv(query: string, opts: { language: TmdbLang }) {
+    const r = await this.get<{ results: TmdbTvSummary[] }>('/search/tv', { query, language: opts.language, include_adult: false })
+    return r.results
+  }
+
+  async movieAltTitles(id: number) {
+    try {
+      const r = await this.get<{
+        alternative_titles?: { titles: { title: string }[] }
+        translations?: { translations: { data: { title?: string } }[] }
+      }>(`/movie/${id}`, { append_to_response: 'alternative_titles,translations' })
+      const titles = [
+        ...(r.alternative_titles?.titles ?? []).map((t) => t.title),
+        ...(r.translations?.translations ?? []).map((t) => t.data.title ?? ''),
+      ]
+      return [...new Set(titles.filter(Boolean))]
+    } catch (err) {
+      if (err instanceof HttpError && err.status === 404) return []
+      throw err
+    }
+  }
+
   movieGenres() {
     this.genreCache ??= this.get<{ genres: { id: number; name: string }[] }>('/genre/movie/list', { language: 'en-US' }).then(
       (r) => r.genres,
@@ -205,7 +240,12 @@ export type CatalogFilm = {
   vote_count: number
   popularity: number
   poster_path?: string | null
+  /** 别名 / 其他译名（TMDB alternative_titles + translations） */
+  aka?: string[]
 }
+
+/** 离线片目里的剧集（测试用，只支持搜索）。 */
+export type CatalogTv = { tmdb_id: number; name: string; original_name: string; year: number | null; vote_count: number; popularity: number }
 
 /** TMDB 的 movie genre 表（en），离线实现与 discover 共用。 */
 export const TMDB_GENRES: { id: number; name: string }[] = [
@@ -240,7 +280,10 @@ export class CatalogTmdbClient implements TmdbClient {
   private readonly byId = new Map<number, CatalogFilm>()
   private readonly keywordIds = new Map<string, number>()
 
-  constructor(readonly films: CatalogFilm[]) {
+  constructor(
+    readonly films: CatalogFilm[],
+    readonly tv: CatalogTv[] = [],
+  ) {
     for (const f of films) {
       this.byId.set(f.tmdb_id, f)
       for (const k of f.keywords) if (!this.keywordIds.has(k)) this.keywordIds.set(k, hashId(k))
@@ -273,7 +316,7 @@ export class CatalogTmdbClient implements TmdbClient {
     return this.films
       .filter((f) => !opts.year || f.year === opts.year)
       .map((f) => {
-        const titles = [f.title_en, f.original_title, f.title_zh ?? '']
+        const titles = [f.title_en, f.original_title, f.title_zh ?? '', ...(f.aka ?? [])]
         const contains = titles.some((t) => normalizeTitle(t).includes(q))
         const sim = Math.max(...titles.map((t) => titleSim(query, t)))
         return { f, rank: contains ? 1 + sim : sim }
@@ -385,6 +428,28 @@ export class CatalogTmdbClient implements TmdbClient {
 
   async movieGenres() {
     return TMDB_GENRES
+  }
+
+  async searchTv(query: string) {
+    const q = normalizeTitle(query)
+    if (!q) return []
+    return this.tv
+      .map((t) => ({ t, sim: Math.max(titleSim(query, t.name), titleSim(query, t.original_name)) }))
+      .filter((x) => x.sim >= 0.55)
+      .sort((a, b) => b.sim - a.sim || b.t.popularity - a.t.popularity)
+      .map(({ t }) => ({
+        id: t.tmdb_id,
+        name: t.name,
+        original_name: t.original_name,
+        first_air_date: t.year ? `${t.year}-01-01` : null,
+        popularity: t.popularity,
+        vote_count: t.vote_count,
+      }))
+  }
+
+  async movieAltTitles(id: number) {
+    const f = this.byId.get(id)
+    return f ? [...new Set([f.title_en, f.original_title, f.title_zh ?? '', ...(f.aka ?? [])].filter(Boolean))] : []
   }
 }
 

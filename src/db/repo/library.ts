@@ -1,7 +1,7 @@
 /**
  * 片库相关查询：films（全局缓存）、film_aliases（外部条目 → TMDB）、watch_log / watchlist（按用户隔离）。
  */
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, notInArray, or, sql, type SQL } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, ne, notInArray, or, sql, type SQL } from 'drizzle-orm'
 import { getDb, tx } from '../client'
 import {
   filmAliases,
@@ -90,6 +90,16 @@ export function upsertAlias(input: {
     })
     .returning()
     .get()
+}
+
+/** 外部补来的年份 / IMDb 号（Wikidata）：只填空着的字段。 */
+export function fillAliasRaw(aliasId: number, patch: { yearRaw?: number | null; imdbIdRaw?: string | null }): void {
+  const a = getAlias(aliasId)
+  if (!a) return
+  const set: Partial<typeof filmAliases.$inferInsert> = {}
+  if (patch.yearRaw && !a.yearRaw) set.yearRaw = patch.yearRaw
+  if (patch.imdbIdRaw && !a.imdbIdRaw) set.imdbIdRaw = patch.imdbIdRaw
+  if (Object.keys(set).length) getDb().update(filmAliases).set(set).where(eq(filmAliases.id, aliasId)).run()
 }
 
 export function setAliasMatch(
@@ -351,7 +361,8 @@ export type LibraryQuery = {
 export function listLibrary(userId: string, query: LibraryQuery = {}): { rows: LibraryRow[]; total: number } {
   const db = getDb()
   const filmKey = sql<string>`coalesce('t' || ${watchLog.tmdbId}, 'a' || ${watchLog.aliasId})`
-  const where: SQL[] = [eq(watchLog.userId, userId)]
+  // 剧集等非电影条目不进片库列表（在「待确认」页底部单独列出，可恢复）
+  const where: SQL[] = [eq(watchLog.userId, userId), ne(filmAliases.matchStatus, 'not_film')]
   if (query.q) {
     const like = `%${query.q.toLowerCase()}%`
     where.push(
@@ -427,17 +438,20 @@ export function listLibrary(userId: string, query: LibraryQuery = {}): { rows: L
   }
 }
 
-export function libraryCounts(userId: string): { entries: number; films: number; unresolved: number; watchlist: number } {
+export function libraryCounts(userId: string): { entries: number; films: number; unresolved: number; watchlist: number; notFilm: number } {
   const db = getDb()
-  const entries = db.select({ n: sql<number>`count(*)` }).from(watchLog).where(eq(watchLog.userId, userId)).get()?.n ?? 0
+  const isFilm = and(eq(watchLog.userId, userId), ne(filmAliases.matchStatus, 'not_film'))
+  const entries =
+    db.select({ n: sql<number>`count(*)` }).from(watchLog).innerJoin(filmAliases, eq(filmAliases.id, watchLog.aliasId)).where(isFilm).get()?.n ?? 0
   const filmsN =
     db
       .select({ n: sql<number>`count(distinct coalesce('t' || ${watchLog.tmdbId}, 'a' || ${watchLog.aliasId}))` })
       .from(watchLog)
-      .where(eq(watchLog.userId, userId))
+      .innerJoin(filmAliases, eq(filmAliases.id, watchLog.aliasId))
+      .where(isFilm)
       .get()?.n ?? 0
   const wl = db.select({ n: sql<number>`count(*)` }).from(watchlist).where(eq(watchlist.userId, userId)).get()?.n ?? 0
-  return { entries, films: filmsN, unresolved: unresolvedAliasesForUser(userId).length, watchlist: wl }
+  return { entries, films: filmsN, unresolved: unresolvedAliasesForUser(userId).length, watchlist: wl, notFilm: notFilmAliasesForUser(userId).length }
 }
 
 /** 匹配率：用户引用到的 alias 中已 matched/confirmed 的比例。 */
@@ -450,7 +464,56 @@ export function matchStats(userId: string): Record<FilmAlias['matchStatus'], num
     .where(inArray(filmAliases.id, ids))
     .groupBy(filmAliases.matchStatus)
     .all()
-  const out = { pending: 0, matched: 0, ambiguous: 0, unmatched: 0, confirmed: 0 }
+  const out = { pending: 0, matched: 0, ambiguous: 0, unmatched: 0, confirmed: 0, not_film: 0 }
   for (const r of rows) out[r.s] = r.n
+  return out
+}
+
+/** 匹配率：剧集等非电影条目不计入分母。 */
+export function matchRate(stats: Record<FilmAlias['matchStatus'], number>): number | null {
+  const total = Object.values(stats).reduce((a, b) => a + b, 0) - stats.not_film
+  return total > 0 ? (stats.matched + stats.confirmed) / total : null
+}
+
+/** 用户引用到的、被识别为非电影（剧集等）的条目。 */
+export function notFilmAliasesForUser(userId: string): FilmAlias[] {
+  const db = getDb()
+  const fromLog = db.select({ id: watchLog.aliasId }).from(watchLog).where(eq(watchLog.userId, userId))
+  const fromList = db.select({ id: watchlist.aliasId }).from(watchlist).where(eq(watchlist.userId, userId))
+  return db
+    .select()
+    .from(filmAliases)
+    .where(and(eq(filmAliases.matchStatus, 'not_film'), or(inArray(filmAliases.id, fromLog), inArray(filmAliases.id, fromList))))
+    .orderBy(asc(filmAliases.titleRaw))
+    .all()
+}
+
+/** 「重新匹配」：把用户的待确认条目（ambiguous / unmatched）放回 pending，交给新规则再跑一遍。confirmed / not_film 不动。 */
+export function requeueUnresolvedAliases(userId: string): number {
+  const ids = unresolvedAliasesForUser(userId).map((a) => a.id)
+  if (!ids.length) return 0
+  const db = getDb()
+  for (let i = 0; i < ids.length; i += 500) {
+    db.update(filmAliases).set({ matchStatus: 'pending' }).where(inArray(filmAliases.id, ids.slice(i, i + 500))).run()
+  }
+  return ids.length
+}
+
+/** 每个 alias 最晚一次「看过」的年份（豆瓣：标记日期）——片子不可能在这之后才上映。 */
+export function watchedYearMaxByAlias(aliasIds: readonly number[]): Map<number, number> {
+  const out = new Map<number, number>()
+  const db = getDb()
+  for (let i = 0; i < aliasIds.length; i += 500) {
+    const rows = db
+      .select({ id: watchLog.aliasId, d: sql<string | null>`max(coalesce(${watchLog.watchedAt}, ${watchLog.loggedAt}))` })
+      .from(watchLog)
+      .where(inArray(watchLog.aliasId, aliasIds.slice(i, i + 500)))
+      .groupBy(watchLog.aliasId)
+      .all()
+    for (const r of rows) {
+      const y = Number(r.d?.slice(0, 4))
+      if (Number.isFinite(y) && y > 1880) out.set(r.id, y)
+    }
+  }
   return out
 }

@@ -36,6 +36,7 @@
     "nanoid": "^6.0.2",
     "next": "15.5.27",
     "next-auth": "5.0.0-beta.32",
+    "opencc-js": "^1.4.2",
     "papaparse": "^5.7.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",

@@ -167,8 +167,9 @@ export const filmAliases = sqliteTable(
     /** 外部来源直接给出的 IMDb id（豆瓣 subject 页），供 resolver 第 2 步使用。 */
     imdbIdRaw: text('imdb_id_raw'),
     tmdbId: integer('tmdb_id').references(() => films.tmdbId),
+    /** not_film：剧集 / 综艺 / 舞台录像等不在 TMDB 电影库里的条目（自动识别或用户标记），不进待确认 */
     matchStatus: text('match_status', {
-      enum: ['pending', 'matched', 'ambiguous', 'unmatched', 'confirmed'],
+      enum: ['pending', 'matched', 'ambiguous', 'unmatched', 'confirmed', 'not_film'],
     })
       .notNull()
       .default('pending'),
