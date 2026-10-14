@@ -92,6 +92,34 @@ export function upsertAlias(input: {
     .get()
 }
 
+/**
+ * 中文区通行片名：豆瓣条目的标题（已匹配 / 已确认）。豆瓣导出的标题就是中文区的叫法，
+ * 比 TMDB 的 zh-CN 译名更贴近用户习惯。「中文名 / 原名」格式只取第一段。
+ */
+export function doubanTitlesByTmdb(tmdbIds: readonly number[]): Map<number, string> {
+  const out = new Map<number, string>()
+  const db = getDb()
+  for (let i = 0; i < tmdbIds.length; i += 500) {
+    const rows = db
+      .select({ tmdbId: filmAliases.tmdbId, title: filmAliases.titleRaw })
+      .from(filmAliases)
+      .where(
+        and(
+          eq(filmAliases.provider, 'douban'),
+          inArray(filmAliases.tmdbId, tmdbIds.slice(i, i + 500)),
+          inArray(filmAliases.matchStatus, ['matched', 'confirmed']),
+        ),
+      )
+      .orderBy(asc(filmAliases.id))
+      .all()
+    for (const r of rows) {
+      const t = r.title.split(/\s+\/\s+/)[0]?.trim()
+      if (r.tmdbId != null && t && !out.has(r.tmdbId)) out.set(r.tmdbId, t)
+    }
+  }
+  return out
+}
+
 /** 外部补来的年份 / IMDb 号（Wikidata）：只填空着的字段。 */
 export function fillAliasRaw(aliasId: number, patch: { yearRaw?: number | null; imdbIdRaw?: string | null }): void {
   const a = getAlias(aliasId)

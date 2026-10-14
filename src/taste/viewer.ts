@@ -4,7 +4,7 @@
  */
 import { and, asc, eq, ne } from 'drizzle-orm'
 import { getDb } from '@/db/client'
-import { getFilms } from '@/db/repo/library'
+import { doubanTitlesByTmdb, getFilms } from '@/db/repo/library'
 import { filmAliases, watchLog, watchlist, type Film } from '@/db/schema'
 
 export type ViewerFilm = {
@@ -26,9 +26,25 @@ export type ViewerFilm = {
   nonFilm?: boolean
   /** TA 自己写的短评（最近一条非空的） */
   review?: string | null
+  /** 中文区通行片名：豆瓣标题优先，其次 TMDB zh-CN；与英文名相同时为空 */
+  titleZh?: string | null
 }
 
-export type WatchlistFilm = { key: string; tmdbId: number | null; title: string; year: number | null; directors: string[]; film: Film | null }
+export type WatchlistFilm = {
+  key: string
+  tmdbId: number | null
+  title: string
+  year: number | null
+  directors: string[]
+  film: Film | null
+  titleZh?: string | null
+}
+
+/** 中文名：豆瓣条目标题（「中文 / 原名」取第一段）> TMDB zh-CN；和英文名一样就不重复。 */
+function zhTitle(english: string, film: Film | null, doubanTitle: string | null | undefined, douban: Map<number, string>): string | null {
+  const raw = doubanTitle?.split(/\s+\/\s+/)[0]?.trim() || (film ? douban.get(film.tmdbId) : undefined) || film?.titleZh || null
+  return raw && raw !== english ? raw : null
+}
 
 export function loadViewerFilms(userId: string): ViewerFilm[] {
   const db = getDb()
@@ -46,6 +62,7 @@ export function loadViewerFilms(userId: string): ViewerFilm[] {
       yearRaw: filmAliases.yearRaw,
       matchStatus: filmAliases.matchStatus,
       reviewText: watchLog.reviewText,
+      provider: watchLog.provider,
     })
     .from(watchLog)
     .innerJoin(filmAliases, eq(filmAliases.id, watchLog.aliasId))
@@ -53,7 +70,9 @@ export function loadViewerFilms(userId: string): ViewerFilm[] {
     .orderBy(asc(watchLog.id))
     .all()
 
-  const films = new Map(getFilms([...new Set(rows.map((r) => r.tmdbId).filter((x): x is number => x != null))]).map((f) => [f.tmdbId, f]))
+  const ids = [...new Set(rows.map((r) => r.tmdbId).filter((x): x is number => x != null))]
+  const films = new Map(getFilms(ids).map((f) => [f.tmdbId, f]))
+  const douban = doubanTitlesByTmdb(ids)
   const groups = new Map<string, typeof rows>()
   for (const r of rows) {
     const key = r.tmdbId != null ? `t${r.tmdbId}` : `a${r.aliasId}`
@@ -86,6 +105,7 @@ export function loadViewerFilms(userId: string): ViewerFilm[] {
       film,
       ...(first.tmdbId == null && g.every((r) => r.matchStatus === 'not_film') ? { nonFilm: true } : {}),
       review: sorted.find((r) => r.reviewText?.trim())?.reviewText?.trim() ?? null,
+      titleZh: zhTitle(film?.titleEn ?? first.titleRaw, film, g.find((r) => r.provider === 'douban')?.titleRaw, douban),
     })
   }
   return sortViewerFilms(out)
@@ -103,12 +123,20 @@ export function sortViewerFilms<T extends { tmdbId: number | null; title: string
 export function loadWatchlist(userId: string): WatchlistFilm[] {
   const db = getDb()
   const rows = db
-    .select({ aliasId: watchlist.aliasId, tmdbId: watchlist.tmdbId, titleRaw: filmAliases.titleRaw, yearRaw: filmAliases.yearRaw })
+    .select({
+      aliasId: watchlist.aliasId,
+      tmdbId: watchlist.tmdbId,
+      titleRaw: filmAliases.titleRaw,
+      yearRaw: filmAliases.yearRaw,
+      provider: filmAliases.provider,
+    })
     .from(watchlist)
     .innerJoin(filmAliases, eq(filmAliases.id, watchlist.aliasId))
     .where(and(eq(watchlist.userId, userId), ne(filmAliases.matchStatus, 'not_film')))
     .all()
-  const films = new Map(getFilms([...new Set(rows.map((r) => r.tmdbId).filter((x): x is number => x != null))]).map((f) => [f.tmdbId, f]))
+  const ids = [...new Set(rows.map((r) => r.tmdbId).filter((x): x is number => x != null))]
+  const films = new Map(getFilms(ids).map((f) => [f.tmdbId, f]))
+  const douban = doubanTitlesByTmdb(ids)
   const seen = new Set<string>()
   const out: WatchlistFilm[] = []
   for (const r of rows) {
@@ -123,6 +151,7 @@ export function loadWatchlist(userId: string): WatchlistFilm[] {
       year: film?.year ?? r.yearRaw,
       directors: (film?.directors ?? []).map((d) => d.name),
       film,
+      titleZh: zhTitle(film?.titleEn ?? r.titleRaw, film, r.provider === 'douban' ? r.titleRaw : null, douban),
     })
   }
   return sortViewerFilms(out)

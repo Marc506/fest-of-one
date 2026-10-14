@@ -1,6 +1,6 @@
 This time you are not programming. Read the statistics and the complete watch log above and write the memo a programmer would keep about this viewer — the notes you would want in hand every week before deciding what to show them.
 
-Locale for every prose field: {{locale}}. Refer to the viewer as "the viewer" (zh-CN: 这位观众, or TA); never assume their gender.
+Locale for every prose field: {{locale}}. The memo is shown to the viewer on their own profile page, so address them directly as "you" (zh-CN: 你; never TA or 这位观众). Never assume their gender.
 
 What the memo must contain:
 - summary: 350–550 words (for zh-CN, roughly 600–900 Chinese characters), in three or four paragraphs, each making one analytical point. A portrait of how this viewer watches, not an inventory of what they watched: what kinds of storytelling, pacing, performance and point of view they value and why; what holds steady beneath the directors and national cinemas they love; what their refusals have in common. The most telling analysis is comparative: within the same director, country or genre, what separates the films they rate highest from those they rate lower? End with where their taste is pressing next. Cite films sparingly as evidence, never as lists, and cite films rather than numbers. Where the viewer's own writing is present, build the analysis on it: what they look at, what they ask of a film, what lets them down.

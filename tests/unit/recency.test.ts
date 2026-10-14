@@ -163,7 +163,7 @@ describe("viewer's own words from the database", () => {
     updateUserSettings(user.id, { prefs: { ...DEFAULT_PREFS, writing_sample: '我还想看电影是怎么破坏空间的。' } })
     const state = currentWatchState(user.id)
     expect(state.films[0]!.review).toBe('打戏好看，但空间没有参与进来')
-    expect(state.log.text).toContain('777|Havoc (2025)|打戏好看，但空间没有参与进来')
+    expect(state.log.text).toContain('777|Havoc / 火遮眼 (2025)|打戏好看，但空间没有参与进来')
     expect(state.log.text).toContain('我还想看电影是怎么破坏空间的。')
   })
 })

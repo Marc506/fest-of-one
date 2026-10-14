@@ -82,7 +82,7 @@ describe('taste profile (M2)', () => {
     const system = req.system as { text: string; cache_control?: unknown }[]
     expect(system).toHaveLength(3)
     for (const b of system) expect(b.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' })
-    expect(system[2]!.text).toContain('843|In the Mood for Love (2000)|Wong Kar-wai|HK,FR|10|L|2023-02')
+    expect(system[2]!.text).toContain('843|In the Mood for Love / 花样年华 (2000)|Wong Kar-wai|HK,FR|10|L|2023-02')
     expect(system.map((b) => b.text).join('')).not.toMatch(/2026-10-13|Today/)
     expect(req.output_config?.effort).toBe('high')
     expect(req).not.toHaveProperty('thinking')

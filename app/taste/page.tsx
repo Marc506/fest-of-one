@@ -4,6 +4,7 @@ import { findActiveJob } from '@/db/repo/jobs'
 import { getTasteProfileVersion, latestTasteProfile, listTasteProfileVersions } from '@/db/repo/taste'
 import { requirePageUser } from '@/lib/session'
 import { rebuildDecision } from '@/taste/profile'
+import { toSecondPerson } from '@/taste/memo'
 import { RECENCY_LABELS } from '@/taste/recency'
 import { Badge } from '../_components/ui'
 import { RebuildButton } from './RebuildButton'
@@ -56,7 +57,8 @@ export default async function TastePage({ searchParams }: { searchParams: Promis
       </div>
     )
   }
-  const { stats, memo } = p
+  const stats = p.stats
+  const memo = p.memo ? toSecondPerson(p.memo) : null
   const titles = new Map(getFilms([...new Set([...(memo?.affinities.flatMap((a) => a.evidence) ?? []), ...(memo?.frontiers.flatMap((f) => f.seed_films) ?? [])])]).map((f) => [f.tmdbId, f.titleZh ?? f.titleEn]))
   const name = (id: number) => titles.get(id) ?? `#${id}`
 

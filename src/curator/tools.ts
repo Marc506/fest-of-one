@@ -61,6 +61,7 @@ function brief(f: Film | undefined, s: TmdbMovieSummary, seen: Set<number>) {
   return {
     tmdb_id: s.id,
     title: f?.titleEn ?? s.title,
+    title_zh: f?.titleZh ?? null,
     original_title: f?.originalTitle ?? s.original_title,
     year: f?.year ?? yearOf(s.release_date),
     directors: f ? f.directors.map((d) => d.name) : [],
@@ -165,6 +166,7 @@ export function createToolExecutor(ctx: ToolContext) {
         return {
           tmdb_id: f.tmdbId,
           title: f.titleEn,
+          title_zh: f.titleZh,
           original_title: f.originalTitle,
           year: f.year,
           directors: f.directors.map((d) => d.name),

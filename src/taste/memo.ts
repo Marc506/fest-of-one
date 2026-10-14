@@ -60,3 +60,21 @@ export function sanitizeMemo(memo: TasteMemoT, log: SerializedLog): TasteMemoT {
 export function renderMemoMd(memo: TasteMemoT): string {
   return memo.summary.trim()
 }
+
+/**
+ * 旧画像（提示词 v6 之前）用「TA」「这位观众」称呼用户；页面面向用户本人，显示时统一改成「你」。
+ * 只改显示、不改存档；新画像本来就用「你」。
+ */
+export function toSecondPerson<T>(value: T): T {
+  if (typeof value === 'string') {
+    return value
+      .replace(/这位观众/g, '你')
+      .replace(/(?<![A-Za-z])TA(?![A-Za-z])\s?/g, '你') as T
+  }
+  if (Array.isArray(value)) return value.map((v) => toSecondPerson(v)) as T
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, toSecondPerson(v)])) as T
+  }
+  return value
+}
+

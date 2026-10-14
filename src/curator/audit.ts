@@ -4,6 +4,7 @@
  * 代码再校验一次：slate ⊆ keep、无重复、无已看、position 1..N 连续、不含 infeasible / commercial_disposable。
  */
 import type Anthropic from '@anthropic-ai/sdk'
+import { doubanTitlesByTmdb } from '@/db/repo/library'
 import { stableStringify } from '@/lib/json'
 import { cachedText } from '@/llm/client'
 import { callStructured } from '@/llm/call'
@@ -15,6 +16,7 @@ import { AuditOutput, type AuditOutputT } from './schemas'
 
 export function conceptBlock(g: GroundedConcept): string {
   const c = g.concept
+  const douban = doubanTitlesByTmdb(g.candidates.map((x) => x.tmdb_id))
   const programme = {
     kind: c.kind,
     subject: c.subject,
@@ -25,6 +27,7 @@ export function conceptBlock(g: GroundedConcept): string {
     candidates: g.candidates.map((x) => ({
       tmdb_id: x.tmdb_id,
       title: x.film.titleEn,
+      title_zh: douban.get(x.tmdb_id) ?? x.film.titleZh,
       original_title: x.film.originalTitle,
       year: x.film.year,
       directors: x.film.directors.map((d) => d.name),

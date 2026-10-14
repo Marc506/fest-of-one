@@ -29,14 +29,16 @@ export function flagsOf(f: Pick<ViewerFilm, 'liked' | 'rewatch' | 'views' | 'rat
   return `${f.liked ? 'L' : ''}${f.rewatch ? 'R' : ''}${f.views > 1 ? 'W' : ''}${f.rating10 != null && f.rating10 <= 4 ? 'D' : ''}`
 }
 
-function titleYear(f: { title: string; year: number | null }): string {
-  return `${clean(f.title)} (${f.year ?? '?'})`
+/** zh：中文用户的记录在英文名后附中文区通行片名（「English / 中文 (year)」），模型写中文时照用。 */
+function titleYear(f: { title: string; year: number | null; titleZh?: string | null }, zh = false): string {
+  const name = zh && f.titleZh ? `${clean(f.title)} / ${clean(f.titleZh)}` : clean(f.title)
+  return `${name} (${f.year ?? '?'})`
 }
 
-export function fullLine(f: ViewerFilm, weight?: number): string {
+export function fullLine(f: ViewerFilm, weight?: number, zh = false): string {
   const cols: (string | number)[] = [
     f.tmdbId ?? '?',
-    titleYear(f),
+    titleYear(f, zh),
     f.directors.map(clean).join(' & ') || '-',
     f.countries.join(',') || '-',
     f.rating10 ?? '-',
@@ -47,8 +49,8 @@ export function fullLine(f: ViewerFilm, weight?: number): string {
   return cols.join('|')
 }
 
-export function indexLine(f: { tmdbId: number | null; title: string; year: number | null }): string {
-  return `${f.tmdbId ?? '?'}|${titleYear(f)}`
+export function indexLine(f: { tmdbId: number | null; title: string; year: number | null; titleZh?: string | null }, zh = false): string {
+  return `${f.tmdbId ?? '?'}|${titleYear(f, zh)}`
 }
 
 export type SerializedLog = { text: string; lines: number; split: boolean; hash: string }
@@ -59,7 +61,7 @@ const cut = (t: string, max: number) => {
 }
 
 /** 短评段：总量有上限；超出时优先权重高、再看得近的，输出顺序跟随 films（tmdb_id 升序）。 */
-function reviewSection(films: ViewerFilm[], weightOf: (f: ViewerFilm) => number): string[] {
+function reviewSection(films: ViewerFilm[], weightOf: (f: ViewerFilm) => number, zh: boolean): string[] {
   const all = films.map((f, i) => ({ f, i, text: f.review ? cut(clean(f.review), REVIEW_MAX_CHARS) : '' })).filter((x) => x.text)
   if (!all.length) return []
   const ranked = [...all].sort(
@@ -79,7 +81,7 @@ function reviewSection(films: ViewerFilm[], weightOf: (f: ViewerFilm) => number)
     '',
     `## In the viewer's own words (${shown.length} short reviews they wrote${scope}; quoted as written, long ones cut with …)`,
     'tmdb_id|title (year)|their review',
-    ...shown.map((x) => `${x.f.tmdbId ?? '?'}|${titleYear(x.f)}|${x.text}`),
+    ...shown.map((x) => `${x.f.tmdbId ?? '?'}|${titleYear(x.f, zh)}|${x.text}`),
   ]
 }
 
@@ -92,16 +94,17 @@ function writingSection(sample: string | null | undefined): string[] {
 export function serializeWatchLog(
   films: ViewerFilm[],
   watchlist: WatchlistFilm[] = [],
-  opts: { splitThreshold?: number; recency?: RecencyLevelT; nonFilm?: ViewerFilm[]; writingSample?: string | null } = {},
+  opts: { splitThreshold?: number; recency?: RecencyLevelT; nonFilm?: ViewerFilm[]; writingSample?: string | null; locale?: string } = {},
 ): SerializedLog {
   const threshold = opts.splitThreshold ?? SPLIT_THRESHOLD
   const recency = opts.recency ?? 'off'
   const weighting = describeRecency(recency)
   const recencyAt = recencyAnchor(films)
-  const line = (f: ViewerFilm) => fullLine(f, weighting ? recencyWeight(f, recencyAt, recency) : undefined)
+  const zh = opts.locale === 'zh-CN'
+  const line = (f: ViewerFilm) => fullLine(f, weighting ? recencyWeight(f, recencyAt, recency) : undefined, zh)
   const out: string[] = []
   const header =
-    'Format: tmdb_id|title (year)|directors|countries|rating10 (1–10, - = unrated)|flags (L liked, R rewatch, W watched more than once, D disliked ≤4)|last watched YYYY-MM' +
+    `Format: tmdb_id|${zh ? 'title / 中文区通行片名 when known' : 'title'} (year)|directors|countries|rating10 (1–10, - = unrated)|flags (L liked, R rewatch, W watched more than once, D disliked ≤4)|last watched YYYY-MM` +
     (weighting ? `|weight. ${weighting}` : '.') +
     ' tmdb_id ? = not matched to TMDB.'
   if (films.length <= threshold) {
@@ -118,10 +121,10 @@ export function serializeWatchLog(
       header,
       ...full.map(line),
       `### INDEX (seen, unrated; tmdb_id|title (year) only)`,
-      ...index.map(indexLine),
+      ...index.map((f) => indexLine(f, zh)),
     )
   }
-  out.push(...reviewSection(films, (f) => (weighting ? recencyWeight(f, recencyAt, recency) : 1)))
+  out.push(...reviewSection(films, (f) => (weighting ? recencyWeight(f, recencyAt, recency) : 1), zh))
   out.push(...writingSection(opts.writingSample))
   if (opts.nonFilm?.length) {
     // 剧集 / 综艺等：不是电影、也不会被排片，只留标题，让策展人知道 TA 还看这些
@@ -129,7 +132,7 @@ export function serializeWatchLog(
     out.push(opts.nonFilm.map((f) => clean(f.title)).join(' · '))
   }
   out.push('', `## Watchlist (${watchlist.length} films they have said they want to see; may be programmed, not required)`, 'WATCHLIST: tmdb_id|title (year)|directors')
-  for (const w of watchlist) out.push(`WATCHLIST: ${indexLine(w)}|${w.directors.map(clean).join(' & ') || '-'}`)
+  for (const w of watchlist) out.push(`WATCHLIST: ${indexLine(w, zh)}|${w.directors.map(clean).join(' & ') || '-'}`)
   const text = out.join('\n')
   return { text, lines: films.length, split: films.length > threshold, hash: createHash('sha256').update(text).digest('hex') }
 }
