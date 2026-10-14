@@ -2,10 +2,20 @@
 
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import { Poster } from '../_components/Poster'
 import { Badge, Button } from '../_components/ui'
 import { TmdbSearch } from './TmdbSearch'
 
-type Candidate = { tmdb_id: number; title: string; year: number | null; score: number; original_title?: string; vote_count?: number }
+type Candidate = {
+  tmdb_id: number
+  title: string
+  year: number | null
+  score: number
+  original_title?: string
+  vote_count?: number
+  poster_path?: string | null
+  directors?: string[]
+}
 
 export function ResolveRow({
   alias,
@@ -48,22 +58,33 @@ export function ResolveRow({
         {!alias.watched && <Badge>想看</Badge>}
       </div>
       {alias.candidates.length > 0 && (
-        <ul className="flex flex-wrap gap-2">
+        <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {alias.candidates.map((c) => (
-            <li key={c.tmdb_id} className="flex items-center gap-1">
-              <Button variant="outline" disabled={busy !== null} onClick={() => pick(c.tmdb_id)} title={`匹配分 ${c.score}`}>
-                {busy === c.tmdb_id ? '…' : `${c.title} (${c.year ?? '?'})`}
-                {c.original_title && c.original_title !== c.title && <span className="text-xs opacity-60">{c.original_title}</span>}
-                {c.vote_count != null && <span className="text-xs opacity-60">· {c.vote_count} 票</span>}
-              </Button>
+            <li key={c.tmdb_id}>
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => pick(c.tmdb_id)}
+                title={`选这部 · 匹配分 ${c.score}`}
+                className="flex w-full items-start gap-3 rounded border border-rule p-2 text-left transition hover:border-ink disabled:opacity-50"
+              >
+                <Poster path={c.poster_path ?? null} title={c.title} size="w92" className="w-12 shrink-0 rounded" />
+                <span className="min-w-0 flex-1 space-y-0.5 text-sm">
+                  <span className="block truncate">
+                    {busy === c.tmdb_id ? '…' : c.title} <span className="text-muted">({c.year ?? '?'})</span>
+                  </span>
+                  {c.original_title && c.original_title !== c.title && <span className="block truncate text-xs text-muted">{c.original_title}</span>}
+                  <span className="block truncate text-xs text-muted">{c.directors?.length ? `导演：${c.directors.join('、')}` : '导演：—'}</span>
+                  {c.vote_count != null && <span className="block text-xs text-muted">{c.vote_count} 票</span>}
+                </span>
+              </button>
               <a
                 href={`https://www.themoviedb.org/movie/${c.tmdb_id}`}
                 target="_blank"
                 rel="noreferrer"
-                className="text-xs text-muted hover:text-ink"
-                title="在 TMDB 查看"
+                className="mt-0.5 inline-block text-xs text-muted hover:text-ink"
               >
-                ↗
+                在 TMDB 查看 ↗
               </a>
             </li>
           ))}

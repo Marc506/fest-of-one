@@ -23,7 +23,7 @@ export const TasteMemo = z
     summary: z
       .string()
       .describe(
-        'Written in the requested locale, 350–550 words in two to four paragraphs: a critic’s portrait of this viewer’s sensibility — what they return to, what they reward, how they watch. No mention of weights, scores, counts or data.',
+        'Written in the requested locale, 350–550 words in two to four paragraphs: an analytical portrait of how this viewer watches — what they value and why, what holds steady, what they refuse. Plain, exact language; titles only as brief evidence. No mention of weights, scores, counts or data.',
       ),
     register: z
       .strictObject({

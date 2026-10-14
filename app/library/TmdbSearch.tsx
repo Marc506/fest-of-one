@@ -11,6 +11,7 @@ export type SearchResult = {
   year: number | null
   poster_path: string | null
   vote_count: number
+  directors?: string[]
   seen: boolean
 }
 
@@ -78,6 +79,7 @@ export function TmdbSearch({
                   {r.title} <span className="text-muted">({r.year ?? '?'})</span>
                 </p>
                 {r.original_title !== r.title && <p className="truncate text-xs text-muted">{r.original_title}</p>}
+                {r.directors && r.directors.length > 0 && <p className="truncate text-xs text-muted">导演：{r.directors.join('、')}</p>}
               </div>
               {action(r)}
             </li>

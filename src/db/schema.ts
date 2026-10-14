@@ -154,6 +154,9 @@ export type MatchCandidate = {
   score: number
   original_title?: string
   vote_count?: number
+  /** 待确认页展示用（旧数据没有；「重新匹配」会补上） */
+  poster_path?: string | null
+  directors?: string[]
 }
 
 export const filmAliases = sqliteTable(

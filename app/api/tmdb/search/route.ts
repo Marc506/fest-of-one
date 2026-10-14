@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { seenTmdbIds } from '@/db/repo/library'
 import { requireApiUser, route } from '@/lib/api'
+import { withDirectors } from '@/resolver/match'
 import { isCjk } from '@/resolver/normalize'
 import { getTmdbClient, yearOf } from '@/resolver/tmdb'
 
@@ -15,14 +16,20 @@ export const GET = route(async (req) => {
   const language = isCjk(q.q) ? 'zh-CN' : 'en-US'
   const results = await client.searchMovie(q.q, { year: q.year, language })
   const seen = seenTmdbIds(user.id)
+  const top = results.slice(0, 10)
+  const directors = await withDirectors(
+    client,
+    top.map((r) => ({ tmdb_id: r.id, title: r.title, year: yearOf(r.release_date), score: 0 })),
+  )
   return NextResponse.json({
-    results: results.slice(0, 10).map((r) => ({
+    results: top.map((r, i) => ({
       tmdb_id: r.id,
       title: r.title,
       original_title: r.original_title,
       year: yearOf(r.release_date),
       poster_path: r.poster_path,
       vote_count: r.vote_count,
+      directors: directors[i]?.directors ?? [],
       seen: seen.has(r.id),
     })),
   })

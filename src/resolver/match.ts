@@ -15,7 +15,7 @@
  *   - 标题带「第 N 季」，或 TMDB 剧集库里有同名剧而电影库里没有 → not_film（不进待确认）
  */
 import type { FilmAlias, MatchCandidate } from '@/db/schema'
-import { fillAliasRaw, insertFilmStub, setAliasMatch } from '@/db/repo/library'
+import { fillAliasRaw, getFilm, insertFilmStub, setAliasMatch } from '@/db/repo/library'
 import { ensureFilm } from './enrich'
 import { isCjk, splitAltTitles, titleSim } from './normalize'
 import { yearOf, type TmdbClient, type TmdbLang, type TmdbMovieSummary, type TmdbTvSummary } from './tmdb'
@@ -81,6 +81,7 @@ export function decide(scored: Scored[]): Decision {
     score: s.score,
     original_title: s.entry.original_title,
     vote_count: s.entry.vote_count,
+    poster_path: s.entry.poster_path,
   }))
   const best = sorted[0]
   if (!best) return { status: 'unmatched', best: null, candidates }
@@ -222,7 +223,7 @@ export async function resolveAlias(alias: FilmAlias, client: TmdbClient, hints: 
       // 同名的电影和剧热度相当：交给用户（待确认里有「不是电影」按钮）
       if (!(filmVotes > 3 * tv.tv.vote_count + 5)) {
         if (d.best) d = { status: 'ambiguous', best: d.best, candidates: d.candidates }
-        return persist(alias, d)
+        return persist(alias, d, client)
       }
     }
     if (d.status !== 'matched') {
@@ -230,10 +231,26 @@ export async function resolveAlias(alias: FilmAlias, client: TmdbClient, hints: 
       if (unique) d = { status: 'matched', best: unique, candidates: d.candidates }
     }
   }
-  return persist(alias, d)
+  return persist(alias, d, client)
 }
 
-function persist(alias: FilmAlias, d: Decision): ResolveResult {
+/** 候选补上导演（片库里有就用片库的），让待确认页一眼认得出是哪一部。失败不影响匹配。 */
+export async function withDirectors(client: TmdbClient, candidates: MatchCandidate[]): Promise<MatchCandidate[]> {
+  return Promise.all(
+    candidates.map(async (c) => {
+      if (c.directors) return c
+      const known = getFilm(c.tmdb_id)?.directors
+      if (known?.length) return { ...c, directors: known.map((d) => d.name) }
+      try {
+        return { ...c, directors: await client.movieDirectors(c.tmdb_id) }
+      } catch {
+        return c
+      }
+    }),
+  )
+}
+
+async function persist(alias: FilmAlias, d: Decision, client: TmdbClient): Promise<ResolveResult> {
   if (d.status === 'matched') {
     insertFilmStub(stubFromSummary(d.best.entry))
     setAliasMatch(alias.id, { status: 'matched', tmdbId: d.best.entry.id, confidence: d.best.score, candidates: null })
@@ -243,7 +260,7 @@ function persist(alias: FilmAlias, d: Decision): ResolveResult {
     status: d.status,
     tmdbId: null,
     confidence: d.best?.score ?? null,
-    candidates: d.candidates,
+    candidates: await withDirectors(client, d.candidates),
   })
   return { status: d.status, tmdbId: null, confidence: d.best?.score ?? null }
 }

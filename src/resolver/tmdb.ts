@@ -91,6 +91,8 @@ export interface TmdbClient {
   searchTv(query: string, opts: { language: TmdbLang }): Promise<TmdbTvSummary[]>
   /** 一部片在 TMDB 上的全部别名与各语言译名（港台译名、旧译名…），给匹配打分用。 */
   movieAltTitles(id: number): Promise<string[]>
+  /** 导演名（待确认候选、搜索结果展示用；比 getMovie 轻） */
+  movieDirectors(id: number): Promise<string[]>
 }
 
 export function yearOf(date: string | null | undefined): number | null {
@@ -199,6 +201,16 @@ export class HttpTmdbClient implements TmdbClient {
         ...(r.translations?.translations ?? []).map((t) => t.data.title ?? ''),
       ]
       return [...new Set(titles.filter(Boolean))]
+    } catch (err) {
+      if (err instanceof HttpError && err.status === 404) return []
+      throw err
+    }
+  }
+
+  async movieDirectors(id: number) {
+    try {
+      const r = await this.get<{ crew: TmdbCrewCredit[] }>(`/movie/${id}/credits`)
+      return [...new Set(r.crew.filter((c) => c.job === 'Director').map((c) => c.name))]
     } catch (err) {
       if (err instanceof HttpError && err.status === 404) return []
       throw err
@@ -450,6 +462,10 @@ export class CatalogTmdbClient implements TmdbClient {
   async movieAltTitles(id: number) {
     const f = this.byId.get(id)
     return f ? [...new Set([f.title_en, f.original_title, f.title_zh ?? '', ...(f.aka ?? [])].filter(Boolean))] : []
+  }
+
+  async movieDirectors(id: number) {
+    return this.byId.get(id)?.directors.map((d) => d.name) ?? []
   }
 }
 

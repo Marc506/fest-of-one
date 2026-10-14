@@ -66,6 +66,9 @@ describe('matching year-less Douban entries', () => {
     expect(alias('1')).toMatchObject({ matchStatus: 'matched', tmdbId: 9100001 })
     expect(alias('2').matchStatus).toBe('ambiguous')
     expect(alias('2').candidates?.map((c) => c.tmdb_id).sort()).toEqual([9100001, 9100002])
+    // 待确认的候选带导演和海报字段，方便一眼认出
+    expect(Object.fromEntries(alias('2').candidates!.map((c) => [c.tmdb_id, c.directors]))).toEqual({ 9100001: ['Gillian Armstrong'], 9100002: ['Greta Gerwig'] })
+    expect(alias('2').candidates!.every((c) => 'poster_path' in c)).toBe(true)
     expect(alias('3')).toMatchObject({ matchStatus: 'matched', tmdbId: 9100003 })
     expect(alias('4')).toMatchObject({ matchStatus: 'matched', tmdbId: 9100004 })
     expect(alias('5').matchStatus).toBe('not_film')
