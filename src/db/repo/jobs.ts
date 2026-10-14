@@ -1,6 +1,7 @@
-import { and, eq, inArray, lt, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, lt, sql } from 'drizzle-orm'
 import { getDb } from '../client'
 import { jobs, type Job, type JobType } from '../schema'
+import { CANCELLED_MESSAGE } from '@/jobs/cancellable'
 import { nowIso } from '@/lib/time'
 
 export const STALE_AFTER_MS = 2 * 60 * 1000
@@ -20,6 +21,26 @@ export function getJobForUser(id: string, userId: string): Job | undefined {
     .from(jobs)
     .where(and(eq(jobs.id, id), eq(jobs.userId, userId)))
     .get()
+}
+
+/** 该用户这类任务里最近一个还没结束的（默认 queued 或 running）。 */
+export function findActiveJob(userId: string, type: JobType, statuses: Job['status'][] = ['queued', 'running']): Job | undefined {
+  return getDb()
+    .select()
+    .from(jobs)
+    .where(and(eq(jobs.userId, userId), eq(jobs.type, type), inArray(jobs.status, statuses)))
+    .orderBy(desc(jobs.createdAt))
+    .get()
+}
+
+/** 取消还在排队的任务（条件更新：worker 已经领走的不受影响）。返回是否取消成功。 */
+export function cancelQueuedJob(id: string, userId: string): boolean {
+  const r = getDb()
+    .update(jobs)
+    .set({ status: 'failed', error: CANCELLED_MESSAGE })
+    .where(and(eq(jobs.id, id), eq(jobs.userId, userId), eq(jobs.status, 'queued')))
+    .run()
+  return r.changes > 0
 }
 
 export function getJob(id: string): Job | undefined {

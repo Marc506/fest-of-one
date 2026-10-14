@@ -1,9 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { CANCELLED_MESSAGE, isCancellable } from '@/jobs/cancellable'
 
 export type JobView = {
   id: string
+  type?: string
   status: 'queued' | 'running' | 'done' | 'failed'
   progress: number
   message: string | null
@@ -45,7 +47,9 @@ export function useJob(jobId: string | null, intervalMs = 1000): JobView | null 
 }
 
 export function JobProgressBar({ job }: { job: JobView | null }) {
+  const [cancelErr, setCancelErr] = useState<string | null>(null)
   if (!job) return null
+  const cancelled = job.status === 'failed' && job.error === CANCELLED_MESSAGE
   const label =
     job.status === 'queued'
       ? '排队中…'
@@ -53,7 +57,14 @@ export function JobProgressBar({ job }: { job: JobView | null }) {
         ? (job.message ?? '进行中…')
         : job.status === 'done'
           ? (job.message ?? '完成')
-          : `失败：${job.error ?? '未知错误'}`
+          : cancelled
+            ? '已取消'
+            : `失败：${job.error ?? '未知错误'}`
+  const cancel = async () => {
+    setCancelErr(null)
+    const res = await fetch(`/api/jobs/${job.id}/cancel`, { method: 'POST' })
+    if (!res.ok) setCancelErr((await res.json()).error?.message ?? '取消失败')
+  }
   return (
     <div className="space-y-1">
       <div className="h-1.5 w-full overflow-hidden rounded bg-rule">
@@ -62,7 +73,15 @@ export function JobProgressBar({ job }: { job: JobView | null }) {
           style={{ width: `${job.status === 'done' ? 100 : job.progress}%` }}
         />
       </div>
-      <p className={`text-xs ${job.status === 'failed' ? 'text-accent' : 'text-muted'}`}>{label}</p>
+      <p className={`text-xs ${job.status === 'failed' && !cancelled ? 'text-accent' : 'text-muted'}`}>
+        {label}
+        {job.status === 'queued' && isCancellable(job.type) && (
+          <button type="button" className="ml-2 underline hover:text-ink" onClick={cancel}>
+            取消
+          </button>
+        )}
+        {cancelErr && <span className="ml-2 text-accent">{cancelErr}</span>}
+      </p>
     </div>
   )
 }

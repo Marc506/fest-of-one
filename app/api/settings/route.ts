@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { updateUserSettings } from '@/db/repo/users'
 import { recencyOf, UserPrefsSchema } from '@/db/types'
-import { enqueueJob } from '@/jobs/queue'
+import { enqueueUnique } from '@/jobs/queue'
 import { parseJson, requireApiUser, route } from '@/lib/api'
 import { currentWatchState } from '@/taste/profile'
 
@@ -36,7 +36,7 @@ export const PUT = route(async (req) => {
     recencyOf(u.prefs) !== recencyOf(user.prefs) || (u.prefs.writing_sample ?? '').trim() !== (user.prefs.writing_sample ?? '').trim()
   let rebuild: string | null = null
   if (changed && currentWatchState(u.id).films.length) {
-    rebuild = enqueueJob('build_taste', { force: true }, u.id).id
+    rebuild = enqueueUnique('build_taste', { force: true }, u.id).job.id
   }
   return NextResponse.json({ locale: u.locale, tz: u.tz, prefs: u.prefs, taste_rebuild_job_id: rebuild })
 })

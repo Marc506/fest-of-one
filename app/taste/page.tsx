@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { getFilms } from '@/db/repo/library'
+import { findActiveJob } from '@/db/repo/jobs'
 import { getTasteProfileVersion, latestTasteProfile, listTasteProfileVersions } from '@/db/repo/taste'
 import { requirePageUser } from '@/lib/session'
 import { rebuildDecision } from '@/taste/profile'
@@ -43,6 +44,7 @@ export default async function TastePage({ searchParams }: { searchParams: Promis
   const p = asked ?? latest
   const versions = listTasteProfileVersions(user.id)
   const decision = rebuildDecision(user.id)
+  const activeJobId = findActiveJob(user.id, 'build_taste')?.id ?? null
   if (!p) {
     return (
       <div className="space-y-6">
@@ -50,7 +52,7 @@ export default async function TastePage({ searchParams }: { searchParams: Promis
         <p className="text-muted">
           还没有画像。{decision.reason === '没有观影记录' ? <>先去 <Link className="underline" href="/onboarding">接入观影记录</Link>。</> : '观影记录导入完成后会自动生成，也可以现在就生成。'}
         </p>
-        {decision.reason !== '没有观影记录' && <RebuildButton label="生成画像" />}
+        {decision.reason !== '没有观影记录' && <RebuildButton label="生成画像" activeJobId={activeJobId} />}
       </div>
     )
   }
@@ -92,7 +94,7 @@ export default async function TastePage({ searchParams }: { searchParams: Promis
             </Link>
           </p>
         </div>
-        <RebuildButton />
+        <RebuildButton activeJobId={activeJobId} />
       </header>
 
       {memo ? (

@@ -6,7 +6,7 @@ import { getTmdbClient } from '@/resolver/tmdb'
 import { doubanHintsFromWikidata, wikidataEnabled, type DoubanHint } from '@/resolver/wikidata'
 import { mapLimit } from '@/lib/http'
 import { rebuildDecision } from '@/taste/profile'
-import { enqueueJob } from '../queue'
+import { enqueueUnique } from '../queue'
 import { explainError } from '@/lib/net-errors'
 import { defineHandler, UserFacingError } from '../types'
 
@@ -84,7 +84,7 @@ export const enrichFilmsHandler = defineHandler({
     const rate = matchRate(stats) ?? 1
     // 画像：观影记录变化足够大时自动重建（6.2）
     const decision = rebuildDecision(userId)
-    const taste = decision.needed ? enqueueJob('build_taste', { force: false }, userId) : null
+    const taste = decision.needed ? enqueueUnique('build_taste', { force: false }, userId).job : null
     const notFilm = outcome.not_film ? `，识别出 ${outcome.not_film} 条剧集等非电影` : ''
     progress(100, `匹配率 ${(rate * 100).toFixed(1)}%${notFilm}，富化 ${enriched.enriched} 部${wikidataNote}`)
     return {
