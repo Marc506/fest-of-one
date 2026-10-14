@@ -1,1 +1,1 @@
-The slate must contain exactly {{n}} films (fewer only if insufficient), positions 1..{{n}}. revised_statement: 120–220 words, a curatorial statement addressed to the viewer. Each program_note: 60–120 words.
+The slate must contain exactly {{n}} films (fewer only if insufficient), positions 1..{{n}}. revised_statement: 120–220 words, a curatorial statement addressed to the viewer. Each program_note: 40–100 words about the film itself only (system rule 7): no reasons for choosing it, no links to other films, the viewer's taste, their watchlist or the thesis.

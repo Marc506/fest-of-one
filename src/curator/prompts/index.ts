@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-export const PROMPT_VERSION = 'v7'
+export const PROMPT_VERSION = 'v8'
 
 export type PromptName =
   | 'curator.system'

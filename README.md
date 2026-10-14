@@ -222,3 +222,4 @@ docker compose up -d --build   # web + worker 两个容器，SQLite 在 ./data
   审查直接读构思写下的缓存，每次生成少写一遍前缀（估计省约 $1）。有测试检查审查确实读到了这段前缀。
 - 对比测试开关（默认不变）：`pnpm curate --user <邮箱> --dry [--model sonnet] [--effort medium] [--ttl 5m]`，打印选片、陈述、场刊和本次花费；也可以写进 `.env`（`CLAUDE_MODEL` / `CURATION_EFFORT` / `LLM_CACHE_TTL`）。
   换模型或 TTL 偏离 CLAUDE.md 的约定，由用户决定后再改默认值。
+- v8：场刊（每部片的介绍）只写片子本身：第一幕为止的情节、怎么拍的、能看到听到什么，40–100 词（中文约 80–180 字）。不写为什么选它，不联系别的片、导演其他作品、用户的口味 / 评分 / 想看片单，也不扣回影展主题——这些都留给策展陈述。

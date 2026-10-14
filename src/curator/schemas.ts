@@ -158,7 +158,11 @@ export const AuditOutput = z.strictObject({
         tmdb_id: id('tmdb_id. Must be a kept candidate.'),
         position: z.number().int().describe('1..N, contiguous.'),
         role: z.enum(SCREENING_ROLES),
-        program_note: z.string().describe('Locale, 60–120 words. Specific, no spoilers past the first act.'),
+        program_note: z
+          .string()
+          .describe(
+            'Locale, 40–100 words, about the film itself only: premise up to the first act, how it is made, what you see and hear. No reasons for choosing it, no links to other films, the viewer’s taste or watchlist, or the programme thesis.',
+          ),
         order_rationale: z.string().describe('Locale. Why it sits at this position.'),
       }),
     )
