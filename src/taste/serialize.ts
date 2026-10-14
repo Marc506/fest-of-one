@@ -6,8 +6,12 @@
  *
  * > 6000 行时分两段：FULL（有评分 / liked / 近 3 年）保留完整行，INDEX 只留 `tmdb_id|title (year)`。
  * 「近 3 年」以记录里最晚的观看日期为锚点（而不是今天），保证同一份记录永远序列化成同样的字节。
+ *
+ * 偏离 6.3：开启近期权重（recency.ts，默认「适中」）时，FULL 行末尾多一列 `|weight`（0–1）。
+ * 权重同样以记录内最晚日期为锚点，所以仍然确定性；关闭时格式与 6.3 完全一致。
  */
 import { createHash } from 'node:crypto'
+import { describeRecency, recencyAnchor, recencyWeight, type RecencyLevelT } from './recency'
 import type { ViewerFilm, WatchlistFilm } from './viewer'
 
 export const SPLIT_THRESHOLD = 6000
@@ -22,8 +26,8 @@ function titleYear(f: { title: string; year: number | null }): string {
   return `${clean(f.title)} (${f.year ?? '?'})`
 }
 
-export function fullLine(f: ViewerFilm): string {
-  return [
+export function fullLine(f: ViewerFilm, weight?: number): string {
+  const cols: (string | number)[] = [
     f.tmdbId ?? '?',
     titleYear(f),
     f.directors.map(clean).join(' & ') || '-',
@@ -31,7 +35,9 @@ export function fullLine(f: ViewerFilm): string {
     f.rating10 ?? '-',
     flagsOf(f) || '-',
     f.lastWatched ? f.lastWatched.slice(0, 7) : '-',
-  ].join('|')
+  ]
+  if (weight !== undefined) cols.push(weight)
+  return cols.join('|')
 }
 
 export function indexLine(f: { tmdbId: number | null; title: string; year: number | null }): string {
@@ -40,15 +46,25 @@ export function indexLine(f: { tmdbId: number | null; title: string; year: numbe
 
 export type SerializedLog = { text: string; lines: number; split: boolean; hash: string }
 
-export function serializeWatchLog(films: ViewerFilm[], watchlist: WatchlistFilm[] = [], opts: { splitThreshold?: number } = {}): SerializedLog {
+export function serializeWatchLog(
+  films: ViewerFilm[],
+  watchlist: WatchlistFilm[] = [],
+  opts: { splitThreshold?: number; recency?: RecencyLevelT } = {},
+): SerializedLog {
   const threshold = opts.splitThreshold ?? SPLIT_THRESHOLD
+  const recency = opts.recency ?? 'off'
+  const weighting = describeRecency(recency)
+  const recencyAt = recencyAnchor(films)
+  const line = (f: ViewerFilm) => fullLine(f, weighting ? recencyWeight(f, recencyAt, recency) : undefined)
   const out: string[] = []
   const header =
-    'Format: tmdb_id|title (year)|directors|countries|rating10 (1–10, - = unrated)|flags (L liked, R rewatch, W watched more than once, D disliked ≤4)|last watched YYYY-MM. tmdb_id ? = not matched to TMDB.'
+    'Format: tmdb_id|title (year)|directors|countries|rating10 (1–10, - = unrated)|flags (L liked, R rewatch, W watched more than once, D disliked ≤4)|last watched YYYY-MM' +
+    (weighting ? `|weight. ${weighting}` : '.') +
+    ' tmdb_id ? = not matched to TMDB.'
   if (films.length <= threshold) {
-    out.push(`## Complete watch log (${films.length} films)`, header, ...films.map(fullLine))
+    out.push(`## Complete watch log (${films.length} films)`, header, ...films.map(line))
   } else {
-    const anchor = films.reduce((m, f) => (f.lastWatched && f.lastWatched > m ? f.lastWatched : m), '')
+    const anchor = recencyAt ?? ''
     const cutoff = anchor ? `${Number(anchor.slice(0, 4)) - 3}${anchor.slice(4)}` : ''
     const isFull = (f: ViewerFilm) => f.rating10 != null || f.liked || (cutoff !== '' && (f.lastWatched ?? '') >= cutoff)
     const full = films.filter(isFull)
@@ -57,7 +73,7 @@ export function serializeWatchLog(films: ViewerFilm[], watchlist: WatchlistFilm[
       `## Complete watch log (${films.length} films; ${full.length} in FULL, ${index.length} in INDEX — together they are every film the viewer has seen)`,
       `### FULL (rated, liked, or watched within 3 years of their latest entry)`,
       header,
-      ...full.map(fullLine),
+      ...full.map(line),
       `### INDEX (seen, unrated; tmdb_id|title (year) only)`,
       ...index.map(indexLine),
     )

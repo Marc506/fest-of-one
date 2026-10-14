@@ -29,6 +29,12 @@ async function main() {
     if (e[k]) ok(`${k} 已设置`)
     else fail(`${k} 没有设置（.env）`)
   }
+  // 复制时被打码 / 截断（· … * 空格、全角字符）的密钥：服务端只会回 401，看不出原因
+  for (const k of ['AUTH_SECRET', 'ANTHROPIC_API_KEY', 'TMDB_READ_TOKEN', 'APP_ENCRYPTION_KEY'] as const) {
+    const v = e[k]
+    if (v && (/[^\x21-\x7e]/.test(v) || /\*{3,}|\.{3,}/.test(v)))
+      fail(`${k} 里有 ·、…、*** 或空格之类的字符，多半是复制时被打码或截断了：从原网页重新复制完整的值`)
+  }
   if (e.APP_ENCRYPTION_KEY) {
     if (Buffer.from(e.APP_ENCRYPTION_KEY, 'base64').length === 32) ok('APP_ENCRYPTION_KEY 是 32 字节')
     else fail('APP_ENCRYPTION_KEY 不是 32 字节的 base64（用 openssl rand -base64 32 生成）')

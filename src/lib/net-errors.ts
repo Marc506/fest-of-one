@@ -45,13 +45,13 @@ export function explainError(err: unknown, service: 'TMDB' | 'Claude API'): stri
   if (err instanceof HttpError) {
     if (err.status === 401)
       return service === 'TMDB'
-        ? 'TMDB 拒绝了令牌（HTTP 401）：检查 .env 里的 TMDB_READ_TOKEN 是不是 TMDB 设置页「API Read Access Token」那一长串（eyJ 开头），不是短的 API Key。'
-        : 'Claude API 拒绝了密钥（HTTP 401）：检查 .env 里的 ANTHROPIC_API_KEY。'
+        ? 'TMDB 拒绝了令牌（HTTP 401）：检查 .env 里的 TMDB_READ_TOKEN 是不是 TMDB 设置页「API Read Access Token」那一长串（eyJ 开头），不是短的 API Key；复制时被打码成 · 或 … 也会这样。'
+        : 'Claude API 拒绝了密钥（HTTP 401）：检查 .env 里的 ANTHROPIC_API_KEY（复制时被打码成 · 或 … 也会这样）。'
     if (err.status === 403) return `${service} 返回 HTTP 403（被拒绝访问）。${PROXY_HINT}`
     return `${service} 返回 HTTP ${err.status}。`
   }
   const status = (err as { status?: number })?.status
-  if (service === 'Claude API' && status === 401) return 'Claude API 拒绝了密钥（HTTP 401）：检查 .env 里的 ANTHROPIC_API_KEY。'
+  if (service === 'Claude API' && status === 401) return 'Claude API 拒绝了密钥（HTTP 401）：检查 .env 里的 ANTHROPIC_API_KEY（复制时被打码成 · 或 … 也会这样）。'
   if (service === 'Claude API' && status === 403) return `Claude API 返回 HTTP 403。${PROXY_HINT}`
   if (isNetworkError(err) || errorCode(err) === 'UND_ERR_ABORTED') {
     const code = errorCode(err)

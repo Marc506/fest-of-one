@@ -4,7 +4,12 @@
  * register 三项是近似指标（仅作参考）：
  * - high_popularity：TMDB vote_count ≥ 4000（拿不到「该年 popularity 分位」时的代理）
  * - festival_core：vote_count < 1500 且非美国出品，或 vote_count < 800 的剧情片
+ *
+ * 近期权重（recency.ts）：每部片带一个 0–1 的权重。导演 / 演员按 Σw ×（加权均分）排序，
+ * 国别 / 类型 / 语言 / 关键词按 Σw 排序；`n`、`avg10` 仍是原始计数与原始均分（事实），`w` 是折算后的有效部数。
+ * 关闭时 w 恒为 1，排序与原来一致。
  */
+import { recencyAnchor, recencyWeight, RECENCY_PRESETS, type RecencyLevelT } from './recency'
 import type { TasteStatsT } from './types'
 import type { ViewerFilm } from './viewer'
 
@@ -12,15 +17,18 @@ export const HIGH_POP_VOTES = 4000
 
 const round = (n: number, d = 2) => Math.round(n * 10 ** d) / 10 ** d
 
-type Acc = { n: number; sum: number; rated: number; liked: number; evidence: number[] }
-const acc = (): Acc => ({ n: 0, sum: 0, rated: 0, liked: 0, evidence: [] })
+type Acc = { n: number; sum: number; rated: number; liked: number; evidence: number[]; w: number; wsum: number; wrated: number }
+const acc = (): Acc => ({ n: 0, sum: 0, rated: 0, liked: 0, evidence: [], w: 0, wsum: 0, wrated: 0 })
 
-function add(m: Map<string, Acc>, key: string, f: ViewerFilm) {
+function add(m: Map<string, Acc>, key: string, f: ViewerFilm, w: number) {
   const a = m.get(key) ?? acc()
   a.n++
+  a.w += w
   if (f.rating10 != null) {
     a.sum += f.rating10
     a.rated++
+    a.wsum += w * f.rating10
+    a.wrated += w
   }
   if (f.liked) a.liked++
   if (f.tmdbId != null) a.evidence.push(f.tmdbId)
@@ -28,8 +36,8 @@ function add(m: Map<string, Acc>, key: string, f: ViewerFilm) {
 }
 
 const avg = (a: Acc) => (a.rated ? round(a.sum / a.rated) : null)
-/** n·avg 排序；没有评分的按 5.5（中性）计 */
-const weight = (a: Acc) => a.n * (avg(a) ?? 5.5)
+/** Σw ×（加权均分）排序；没有评分的按 5.5（中性）计。权重全为 1 时即原来的 n·avg。 */
+const score = (a: Acc) => a.w * (a.wrated ? a.wsum / a.wrated : 5.5)
 
 function percentile(xs: number[], p: number): number | null {
   if (!xs.length) return null
@@ -37,7 +45,9 @@ function percentile(xs: number[], p: number): number | null {
   return s[Math.min(s.length - 1, Math.max(0, Math.ceil(p * s.length) - 1))]!
 }
 
-export function computeTasteStats(films: ViewerFilm[], now: Date = new Date()): TasteStatsT {
+export function computeTasteStats(films: ViewerFilm[], now: Date = new Date(), opts: { recency?: RecencyLevelT } = {}): TasteStatsT {
+  const recency = opts.recency ?? 'off'
+  const anchor = recencyAnchor(films)
   const day = 86400_000
   const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10)
   const d90 = iso(now.getTime() - 90 * day)
@@ -76,14 +86,15 @@ export function computeTasteStats(films: ViewerFilm[], now: Date = new Date()): 
     const film = f.film
     if (!film) continue
     matched++
-    for (const d of film.directors) add(directors, d.name, f)
-    for (const c of film.countries) add(countries, c, f)
-    if (film.year) add(decades, String(Math.floor(film.year / 10) * 10), f)
-    for (const g of film.genres) add(genres, g, f)
-    if (film.languages[0]) add(languages, film.languages[0], f)
+    const w = recencyWeight(f, anchor, recency)
+    for (const d of film.directors) add(directors, d.name, f, w)
+    for (const c of film.countries) add(countries, c, f, w)
+    if (film.year) add(decades, String(Math.floor(film.year / 10) * 10), f, w)
+    for (const g of film.genres) add(genres, g, f, w)
+    if (film.languages[0]) add(languages, film.languages[0], f, w)
     // 只算主演（前 5 位），避免配角刷量
-    for (const c of film.castTop.filter((c) => c.order < 5)) add(actors, c.name, f)
-    for (const k of film.keywords) add(keywords, k, f)
+    for (const c of film.castTop.filter((c) => c.order < 5)) add(actors, c.name, f, w)
+    for (const k of film.keywords) add(keywords, k, f, w)
     if (film.runtimeMin) runtimes.push(film.runtimeMin)
     const votes = film.voteCount ?? 0
     if (votes >= HIGH_POP_VOTES) {
@@ -97,8 +108,9 @@ export function computeTasteStats(films: ViewerFilm[], now: Date = new Date()): 
   }
 
   const ranked = (m: Map<string, Acc>, minN: number, limit: number) =>
-    [...m.entries()].filter(([, a]) => a.n >= minN).sort((x, y) => weight(y[1]) - weight(x[1]) || y[1].n - x[1].n || x[0].localeCompare(y[0])).slice(0, limit)
-  const byCount = (m: Map<string, Acc>) => [...m.entries()].sort((x, y) => y[1].n - x[1].n || x[0].localeCompare(y[0]))
+    [...m.entries()].filter(([, a]) => a.n >= minN).sort((x, y) => score(y[1]) - score(x[1]) || y[1].n - x[1].n || x[0].localeCompare(y[0])).slice(0, limit)
+  const byCount = (m: Map<string, Acc>) => [...m.entries()].sort((x, y) => y[1].w - x[1].w || y[1].n - x[1].n || x[0].localeCompare(y[0]))
+  const ew = (a: Acc) => round(a.w, 1)
 
   return {
     counts: { films: films.length, rated, liked, rewatched, last90d: last90 },
@@ -106,18 +118,19 @@ export function computeTasteStats(films: ViewerFilm[], now: Date = new Date()): 
     directors: ranked(directors, 2, 40).map(([name, a]) => ({
       name,
       n: a.n,
+      w: ew(a),
       avg10: avg(a),
       liked: a.liked,
       evidence: [...a.evidence].sort((x, y) => x - y),
     })),
-    countries: byCount(countries).map(([code, a]) => ({ code, n: a.n, avg10: avg(a) })),
-    decades: [...decades.entries()].sort((x, y) => Number(x[0]) - Number(y[0])).map(([d, a]) => ({ decade: Number(d), n: a.n, avg10: avg(a) })),
-    genres: byCount(genres).map(([name, a]) => ({ name, n: a.n, avg10: avg(a) })),
-    languages: byCount(languages).map(([code, a]) => ({ code, n: a.n })),
-    actors: ranked(actors, 3, 40).map(([name, a]) => ({ name, n: a.n, avg10: avg(a) })),
+    countries: byCount(countries).map(([code, a]) => ({ code, n: a.n, w: ew(a), avg10: avg(a) })),
+    decades: [...decades.entries()].sort((x, y) => Number(x[0]) - Number(y[0])).map(([d, a]) => ({ decade: Number(d), n: a.n, w: ew(a), avg10: avg(a) })),
+    genres: byCount(genres).map(([name, a]) => ({ name, n: a.n, w: ew(a), avg10: avg(a) })),
+    languages: byCount(languages).map(([code, a]) => ({ code, n: a.n, w: ew(a) })),
+    actors: ranked(actors, 3, 40).map(([name, a]) => ({ name, n: a.n, w: ew(a), avg10: avg(a) })),
     keywords: byCount(keywords)
       .slice(0, 60)
-      .map(([kw, a]) => ({ kw, n: a.n })),
+      .map(([kw, a]) => ({ kw, n: a.n, w: ew(a) })),
     loved: films.filter((f) => f.tmdbId != null && ((f.rating10 ?? 0) >= 9 || f.liked)).map((f) => f.tmdbId!),
     disliked: films.filter((f) => f.tmdbId != null && f.rating10 != null && f.rating10 <= 4).map((f) => f.tmdbId!),
     register: {
@@ -127,5 +140,6 @@ export function computeTasteStats(films: ViewerFilm[], now: Date = new Date()): 
     },
     pace_per_week: round(last180 / (180 / 7), 1),
     runtime_tolerance_p90: percentile(runtimes, 0.9),
+    recency: { level: recency, ...(RECENCY_PRESETS[recency] ?? { half_life_years: null, floor: null }) },
   }
 }

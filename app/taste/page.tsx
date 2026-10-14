@@ -3,6 +3,7 @@ import { getFilms } from '@/db/repo/library'
 import { latestTasteProfile } from '@/db/repo/taste'
 import { requirePageUser } from '@/lib/session'
 import { rebuildDecision } from '@/taste/profile'
+import { RECENCY_LABELS } from '@/taste/recency'
 import { Badge } from '../_components/ui'
 import { RebuildButton } from './RebuildButton'
 
@@ -60,7 +61,13 @@ export default async function TastePage() {
           <h1 className="font-serif text-3xl">画像</h1>
           <p className="mt-2 text-sm text-muted">
             第 {p.version} 版 · 基于 {p.watchLogCount} 部 · {p.createdAt.slice(0, 10)}
-            {decision.needed && ' · 观影记录有较多变化，下次导入后会自动重建'}
+            {decision.needed && ` · ${decision.reason}，点「重建画像」更新`}
+          </p>
+          <p className="mt-1 text-xs text-muted">
+            近期权重：{RECENCY_LABELS[stats.recency?.level ?? 'off']}。越早看的记录对画像的影响越小，强烈表态过（喜欢、≥4.5★ 或 ≤2★）的老片保留大部分权重，重看会刷新。
+            <Link className="ml-1 underline" href="/settings">
+              调整
+            </Link>
           </p>
         </div>
         <RebuildButton />
@@ -153,7 +160,7 @@ export default async function TastePage() {
               <li key={d.name} className="flex justify-between gap-2">
                 <span className="truncate">{d.name}</span>
                 <span className="shrink-0 tabular-nums text-muted">
-                  {d.n} 部{d.avg10 != null && ` · ${(d.avg10 / 2).toFixed(1)}★`}
+                  {d.n} 部{d.w != null && d.w !== d.n && `（折算 ${d.w}）`}{d.avg10 != null && ` · ${(d.avg10 / 2).toFixed(1)}★`}
                 </span>
               </li>
             ))}

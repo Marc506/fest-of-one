@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { DEFAULT_RECENCY, RECENCY_LABELS, RECENCY_LEVELS, type RecencyLevelT } from '@/taste/recency'
 import { Button } from '../_components/ui'
 
 type Prefs = {
@@ -10,6 +11,7 @@ type Prefs = {
   weekday_max_runtime_min: number
   preferred_start: string | null
   alarm_min: number | null
+  recency_weighting?: RecencyLevelT
 }
 
 const TZS = ['Asia/Shanghai', 'Asia/Hong_Kong', 'Asia/Taipei', 'Asia/Tokyo', 'Asia/Singapore', 'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'America/New_York', 'America/Chicago', 'America/Los_Angeles', 'Australia/Sydney']
@@ -30,7 +32,7 @@ export function SettingsForm(props: { locale: 'zh-CN' | 'en'; tz: string; prefs:
         setMsg(null)
         const res = await fetch('/api/settings', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ locale, tz, prefs: p }) })
         const body = await res.json()
-        setMsg(res.ok ? '已保存' : (body.error?.message ?? '保存失败'))
+        setMsg(res.ok ? (body.taste_rebuild_job_id ? '已保存，正在按新的近期权重重建画像（约一两分钟）' : '已保存') : (body.error?.message ?? '保存失败'))
       }}
     >
       <label className="space-y-1">
@@ -87,6 +89,24 @@ export function SettingsForm(props: { locale: 'zh-CN' | 'en'; tz: string; prefs:
           onChange={(e) => set('alarm_min', e.target.value === '' ? null : num(e.target.value))}
           className={`w-24 ${input}`}
         />
+      </label>
+      <label className="space-y-1 sm:col-span-2">
+        <span className="block text-muted">近期权重：越早看的记录，对画像和策展的影响越小</span>
+        <select
+          value={p.recency_weighting ?? DEFAULT_RECENCY}
+          onChange={(e) => set('recency_weighting', e.target.value as RecencyLevelT)}
+          className={`w-full sm:w-80 ${input}`}
+        >
+          {RECENCY_LEVELS.map((k) => (
+            <option key={k} value={k}>
+              {RECENCY_LABELS[k]}
+              {k === DEFAULT_RECENCY ? ' · 默认' : ''}
+            </option>
+          ))}
+        </select>
+        <span className="block text-xs text-muted">
+          喜欢、打 ≥4.5★ 或 ≤2★ 的老片保留大部分权重；重看会刷新。所有看过的片仍然都会给策展人看、也永远不会被排进影展。修改后自动重建画像（一次 Claude 调用）。
+        </span>
       </label>
       <div className="flex items-center gap-3 sm:col-span-2">
         <Button type="submit">保存</Button>

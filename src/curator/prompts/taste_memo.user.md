@@ -4,6 +4,7 @@ Locale for every prose field: {{locale}}. Refer to the viewer as "the viewer" (z
 
 What the memo must contain:
 - summary: 250–450 words (for zh-CN, roughly 400–700 Chinese characters). A portrait of them as a viewer: what they return to, what they reward with high ratings and likes, what they reject, how their taste has moved over time (use the last-watched dates), and where it seems to be heading. Be specific: name films and directors from the log.
+- If the log carries weights, describe the viewer as they are now. Strength in affinities and aversions follows the weighted evidence: something supported only by low-weight entries is weaker than something supported recently, while strongly felt older films keep their pull. Say in the summary what has faded and what has lasted.
 - register: three numbers from 0 to 1 and a note. art_house — how much of their viewing and enthusiasm is art cinema. auteur_genre — their appetite for genre cinema made by authors (Carpenter, Mann, Park Chan-wook, Johnnie To…). mainstream_commercial — their tolerance for mainstream commercial cinema. The note says which kinds of genre or commercial film work for them and which do not, with evidence.
 - affinities: 8–20, strongest first. Each names a director, country, era, movement, form, theme, actor or studio, with a strength from 0 to 1, tmdb_ids from the log as evidence, and a one- or two-sentence note.
 - aversions: patterns they reliably dislike (low ratings, D flags), with evidence. Leave empty if nothing is clear.

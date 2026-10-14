@@ -6,31 +6,36 @@
 import { latestTasteProfile, insertTasteProfile } from '@/db/repo/taste'
 import { getUser } from '@/db/repo/users'
 import type { TasteProfile } from '@/db/schema'
+import { recencyOf } from '@/db/types'
 import { llmConfigured } from '@/llm/client'
 import { generateTasteMemo, renderMemoMd } from './memo'
 import { serializeWatchLog, type SerializedLog } from './serialize'
+import type { RecencyLevelT } from './recency'
 import { computeTasteStats } from './stats'
 import { loadViewerFilms, loadWatchlist, type ViewerFilm, type WatchlistFilm } from './viewer'
 
 export const REBUILD_MIN_NEW = 20
 export const REBUILD_MAX_AGE_DAYS = 30
 
-export type WatchState = { films: ViewerFilm[]; watchlist: WatchlistFilm[]; log: SerializedLog }
+export type WatchState = { films: ViewerFilm[]; watchlist: WatchlistFilm[]; log: SerializedLog; recency: RecencyLevelT }
 
 export function currentWatchState(userId: string): WatchState {
   const films = loadViewerFilms(userId)
   const watchlist = loadWatchlist(userId)
-  return { films, watchlist, log: serializeWatchLog(films, watchlist) }
+  const recency = recencyOf(getUser(userId)?.prefs)
+  return { films, watchlist, recency, log: serializeWatchLog(films, watchlist, { recency }) }
 }
 
 export function needsRebuild(
-  profile: Pick<TasteProfile, 'watchLogHash' | 'watchLogCount' | 'createdAt' | 'memo'> | undefined,
-  state: Pick<WatchState, 'log' | 'films'>,
+  profile: Pick<TasteProfile, 'watchLogHash' | 'watchLogCount' | 'createdAt' | 'memo' | 'stats'> | undefined,
+  state: Pick<WatchState, 'log' | 'films' | 'recency'>,
   now = new Date(),
 ): { needed: boolean; reason: string } {
   if (!state.films.length) return { needed: false, reason: '没有观影记录' }
   if (!profile) return { needed: true, reason: '还没有画像' }
   if (profile.watchLogHash === state.log.hash) return { needed: false, reason: '观影记录没有变化' }
+  // 旧画像没有 recency 字段 = 当时未加权
+  if ((profile.stats.recency?.level ?? 'off') !== state.recency) return { needed: true, reason: '近期权重设置变了' }
   const added = Math.abs(state.films.length - profile.watchLogCount)
   if (added >= REBUILD_MIN_NEW) return { needed: true, reason: `新增 ${added} 部` }
   const ageDays = (now.getTime() - new Date(profile.createdAt).getTime()) / 86400_000
@@ -46,7 +51,7 @@ export async function buildTasteProfile(
   if (!user) throw new Error('用户不存在')
   opts.progress?.(5, '整理观影记录…')
   const state = currentWatchState(userId)
-  const stats = computeTasteStats(state.films, opts.now)
+  const stats = computeTasteStats(state.films, opts.now, { recency: state.recency })
   let memoSkipped: string | null = null
   let memo = null
   let usage = null

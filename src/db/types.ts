@@ -2,6 +2,7 @@
  * JSON 列的结构（zod 定义 + 推导类型）。repo 层读写 JSON 列时用这些 schema 校验。
  */
 import { z } from 'zod'
+import { DEFAULT_RECENCY, RECENCY_LEVELS, type RecencyLevelT } from '@/taste/recency'
 
 export type { TasteStatsT } from '@/taste/types'
 export type { TasteMemoT, IdeateConceptT, AuditOutputT } from '@/curator/schemas'
@@ -15,8 +16,14 @@ export const UserPrefsSchema = z.object({
   weekday_max_runtime_min: z.number().int().min(60).max(600),
   preferred_start: HHMM.nullable(),
   alarm_min: z.number().int().min(0).max(1440).nullable(),
+  /** 近期权重：越早看的记录权重越低。旧用户的 prefs 里没有这一项 → 用 recencyOf() 读 */
+  recency_weighting: z.enum(RECENCY_LEVELS).optional(),
 })
 export type UserPrefs = z.infer<typeof UserPrefsSchema>
+
+export function recencyOf(prefs: Pick<UserPrefs, 'recency_weighting'> | null | undefined): RecencyLevelT {
+  return prefs?.recency_weighting ?? DEFAULT_RECENCY
+}
 
 export const DEFAULT_PREFS: UserPrefs = {
   day_bounds: { start: '10:00', end: '24:00' },
@@ -25,6 +32,7 @@ export const DEFAULT_PREFS: UserPrefs = {
   weekday_max_runtime_min: 170,
   preferred_start: '19:30',
   alarm_min: 30,
+  recency_weighting: DEFAULT_RECENCY,
 }
 
 export const AvailabilityBlockSchema = z.object({
