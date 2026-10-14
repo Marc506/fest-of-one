@@ -4,6 +4,10 @@
  *   [1] "## Viewer memo" + 键排序的 memo JSON + "## Stats" + stats JSON
  *   [2] 完整观影记录 + watchlist（确定性序列化）
  * system 里禁止日期、用户 ID、随机数；这些只出现在最后一条 user 消息。
+ *
+ * Call A（构思）与 Call B（审查）共用同一段缓存前缀：工具定义排在最前面，所以 Call B 也带同样的工具定义
+ * （tool_choice none），并用同一个 effort（effort 是否进入前缀因模型而异，统一最稳）。
+ * 这样一次生成只写一遍前缀（约十几万 token），审查直接读。
  */
 import type Anthropic from '@anthropic-ai/sdk'
 import { latestProfileWithMemo, latestTasteProfile } from '@/db/repo/taste'
@@ -15,6 +19,14 @@ import { currentWatchState, type WatchState } from '@/taste/profile'
 import type { TasteStatsT } from '@/taste/types'
 import { prompt } from './prompts'
 import type { TasteMemoT } from './schemas'
+
+const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const
+
+/** 构思与审查共用的 effort（见上：不一致可能让审查读不到构思写下的缓存）。默认 high；`CURATION_EFFORT` 只用于对比测试。 */
+export function curationEffort(): (typeof EFFORTS)[number] {
+  const e = process.env.CURATION_EFFORT
+  return e && (EFFORTS as readonly string[]).includes(e) ? (e as (typeof EFFORTS)[number]) : 'high'
+}
 
 export type CuratorContext = {
   user: User

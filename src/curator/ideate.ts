@@ -3,7 +3,7 @@ import type { FestivalAvoid } from '@/db/types'
 import type { HistoryItem } from '@/db/repo/festivals'
 import { callStructured } from '@/llm/call'
 import type { TmdbClient } from '@/resolver/tmdb'
-import type { CuratorContext } from './context'
+import { curationEffort, type CuratorContext } from './context'
 import { prompt, PROMPT_VERSION, render } from './prompts'
 import { IdeateOutput } from './schemas'
 import { createToolExecutor, TOOL_DEFS } from './tools'
@@ -65,7 +65,7 @@ export async function ideate(
     system: ctx.system,
     messages: [{ role: 'user', content: ideateUserMessage(ctx, input) }],
     schema: IdeateOutput,
-    effort: 'high',
+    effort: curationEffort(),
     tools: { defs: TOOL_DEFS, execute, maxRounds: 12 },
     userId: ctx.user.id,
     jobId: deps.jobId,

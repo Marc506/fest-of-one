@@ -10,6 +10,17 @@ import { MockCuratorTransport } from './mock-curator'
 import { ReplayTransport } from './replay'
 
 export const MODEL = 'claude-opus-5-5'
+
+/**
+ * 实验开关（默认即 CLAUDE.md 的约定：全流程 claude-opus-5-5、1h 缓存）。只用于对比测试，例如
+ * `pnpm curate ... --dry --model sonnet`；写进 .env 则全站生效。缓存按模型隔离，混用模型会互相读不到缓存。
+ */
+export const ALLOWED_MODELS = ['claude-opus-5-5', 'claude-sonnet-5-5'] as const
+
+export function llmModel(): string {
+  const m = process.env.CLAUDE_MODEL
+  return m && (ALLOWED_MODELS as readonly string[]).includes(m) ? m : MODEL
+}
 export const MAX_TOKENS = 16000
 
 export type CreateParams = Anthropic.MessageCreateParamsNonStreaming
@@ -97,6 +108,11 @@ export function llmConfigured(): boolean {
 /** 1 小时缓存断点（7.2）。 */
 export const CACHE_1H = { type: 'ephemeral', ttl: '1h' } as const
 
+/** 缓存断点；`LLM_CACHE_TTL=5m` 时用 5 分钟 TTL（写入价 1.25× 而不是 2×，但隔几分钟再「换一个」就读不到了）。 */
+export function cacheControl(): Anthropic.CacheControlEphemeral {
+  return process.env.LLM_CACHE_TTL === '5m' ? { type: 'ephemeral' } : CACHE_1H
+}
+
 export function cachedText(text: string): Anthropic.TextBlockParam {
-  return { type: 'text', text, cache_control: CACHE_1H }
+  return { type: 'text', text, cache_control: cacheControl() }
 }

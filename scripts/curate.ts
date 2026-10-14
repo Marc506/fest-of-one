@@ -6,6 +6,9 @@
  *   pnpm curate --user dev@local --days 3 --count 4    真实 Claude（需要 ANTHROPIC_API_KEY）
  *   pnpm curate ... --replay                           用 llm_calls 里录制的响应离线重放
  *   pnpm curate ... --dry                              不落库
+ *   pnpm curate ... --model sonnet                     对比测试：改用 claude-sonnet-5-5（默认 opus）
+ *   pnpm curate ... --effort medium                    对比测试：构思与审查的 effort（默认 high）
+ *   pnpm curate ... --ttl 5m                           对比测试：5 分钟缓存（默认 1h）
  *
  * --persona 会把 fixture 画像与离线片目写进数据库（幂等），并强制使用离线片目代替 TMDB。
  */
@@ -21,7 +24,9 @@ import { assembleContext, estimateTokens } from '@/curator/context'
 import { checkInvariants } from '@/curator/invariants'
 import { getDefaultAvailability } from '@/db/repo/availability'
 import { llmConfigured, setTransport } from '@/llm/client'
+import { llmModel } from '@/llm/client'
 import { cacheHitRate, type UsageTotals } from '@/llm/cost'
+import { curationEffort } from '@/curator/context'
 import { MockCuratorTransport } from '@/llm/mock-curator'
 import { ReplayTransport } from '@/llm/replay'
 import { setTmdbClient } from '@/resolver/tmdb'
@@ -31,6 +36,9 @@ import { buildTasteProfile } from '@/taste/profile'
 const { values: args } = parseArgs({
   options: {
     persona: { type: 'string' },
+    model: { type: 'string' },
+    effort: { type: 'string' },
+    ttl: { type: 'string' },
     user: { type: 'string' },
     days: { type: 'string', default: '3' },
     count: { type: 'string', default: '4' },
@@ -44,6 +52,11 @@ const { values: args } = parseArgs({
     help: { type: 'boolean', default: false },
   },
 })
+
+// 对比测试开关：只影响这一次命令（各模块在调用时读环境变量）
+if (args.model) process.env.CLAUDE_MODEL = args.model === 'sonnet' ? 'claude-sonnet-5-5' : args.model === 'opus' ? 'claude-opus-5-5' : args.model
+if (args.effort) process.env.CURATION_EFFORT = args.effort
+if (args.ttl) process.env.LLM_CACHE_TTL = args.ttl
 
 const C = {
   dim: (s: string) => `\x1b[2m${s}\x1b[0m`,
@@ -99,7 +112,7 @@ function report(r: CurationResult, user: User) {
   }
   if (r.feasibility.notes.length) console.log(C.yellow(r.feasibility.notes.join('\n')))
   h('token / 缓存')
-  printUsage(r.usage, '本次')
+  printUsage(r.usage, `本次（${llmModel()} · effort ${curationEffort()} · 缓存 ${process.env.LLM_CACHE_TTL === '5m' ? '5m' : '1h'}）`)
 }
 
 async function prepareUser(): Promise<User[]> {

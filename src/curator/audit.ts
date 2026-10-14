@@ -1,5 +1,6 @@
 /**
- * Call B：片单审查（7.5，purpose audit，effort medium，各概念并行）。
+ * Call B：片单审查（7.5，purpose audit，各概念并行）。
+ * 偏离：effort 由 medium 改为与 Call A 相同的 high，并带上相同的工具定义，为的是共用缓存前缀（省掉每次生成重写一遍前缀）。
  * system 前三块同 A；第 4 块（带 cache 断点）= 审查规则 + 该概念 thesis + 落地后的候选（含 TMDB 事实）。
  * 代码再校验一次：slate ⊆ keep、无重复、无已看、position 1..N 连续、不含 infeasible / commercial_disposable。
  */
@@ -8,7 +9,8 @@ import { doubanTitlesByTmdb } from '@/db/repo/library'
 import { stableStringify } from '@/lib/json'
 import { cachedText } from '@/llm/client'
 import { callStructured } from '@/llm/call'
-import type { CuratorContext } from './context'
+import { curationEffort, type CuratorContext } from './context'
+import { TOOL_DEFS } from './tools'
 import type { GroundedConcept } from './ground'
 import type { Mode } from './ideate'
 import { prompt, PROMPT_VERSION, render } from './prompts'
@@ -115,7 +117,9 @@ export async function audit(
     system: auditSystem(ctx, g),
     messages: [{ role: 'user', content: auditUserMessage(ctx, input) }],
     schema: AuditOutput,
-    effort: 'medium',
+    // 与 Call A 同样的工具定义与 effort → 直接读 Call A 写下的缓存前缀（见 context.ts）
+    effort: curationEffort(),
+    cacheTools: TOOL_DEFS,
     userId: ctx.user.id,
     jobId: deps.jobId,
     log: deps.log,

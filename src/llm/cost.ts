@@ -6,6 +6,8 @@ type Price = { input: number; output: number; cacheRead: number; cacheWrite5m: n
 const PRICES: Record<string, Price> = {
   // Opus 5.5：输入 $4 / 输出 $20 / 缓存读 $0.20；缓存写 5m = 1.25×，1h = 2× 输入价
   'claude-opus-5-5': { input: 4, output: 20, cacheRead: 0.2, cacheWrite5m: 5, cacheWrite1h: 8 },
+  // Sonnet 5.5（只用于对比测试）：输入 $2 / 输出 $10 / 缓存读 $0.20；缓存写 5m $2.5，1h $4
+  'claude-sonnet-5-5': { input: 2, output: 10, cacheRead: 0.2, cacheWrite5m: 2.5, cacheWrite1h: 4 },
 }
 
 export type UsageLike = Pick<Anthropic.Usage, 'input_tokens' | 'output_tokens'> & {

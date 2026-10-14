@@ -8,7 +8,7 @@ import { getSqlite, resolveDbPath } from '@/db/client'
 import { runMigrations } from '@/db/migrate'
 import { explainError } from '@/lib/net-errors'
 import { maskProxy, proxyUrl } from '@/lib/proxy'
-import { MODEL } from '@/llm/client'
+import { llmModel } from '@/llm/client'
 import { HttpTmdbClient } from '@/resolver/tmdb'
 import { doubanHintsFromWikidata, wikidataEnabled } from '@/resolver/wikidata'
 
@@ -89,7 +89,7 @@ async function main() {
   if (e.ANTHROPIC_API_KEY) {
     try {
       const client = new Anthropic({ maxRetries: 0, timeout: 20_000 })
-      const m = await client.models.retrieve(MODEL)
+      const m = await client.models.retrieve(llmModel())
       ok(`Claude API 连通，可用模型 ${m.id}`)
     } catch (err) {
       fail(explainError(err, 'Claude API'))

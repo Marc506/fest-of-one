@@ -7,7 +7,7 @@ import { latestTasteProfile, insertTasteProfile } from '@/db/repo/taste'
 import { getUser } from '@/db/repo/users'
 import type { TasteProfile } from '@/db/schema'
 import { recencyOf } from '@/db/types'
-import { llmConfigured, MODEL } from '@/llm/client'
+import { llmConfigured, llmModel } from '@/llm/client'
 import { generateTasteMemo, renderMemoMd } from './memo'
 import { serializeWatchLog, type SerializedLog } from './serialize'
 import type { RecencyLevelT } from './recency'
@@ -80,7 +80,7 @@ export async function buildTasteProfile(
     stats,
     memo,
     memoMd: memo ? renderMemoMd(memo) : null,
-    model: memo ? MODEL : null,
+    model: memo ? llmModel() : null,
     inputTokens: usage ? usage.input_tokens + usage.cache_creation_input_tokens + usage.cache_read_input_tokens : null,
     outputTokens: usage?.output_tokens ?? null,
   })

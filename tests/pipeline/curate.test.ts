@@ -3,11 +3,14 @@
  * kind 轮换生效；模拟缓存下热态命中率；录制回放可以重现同一结果。
  * LLM 用 MockCuratorTransport（确定性桩），TMDB 用离线片目。
  */
+import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { curate, persistCuration } from '@/curator'
 import { assembleContext } from '@/curator/context'
 import { checkInvariants } from '@/curator/invariants'
+import { getDb } from '@/db/client'
 import { createFestivalRequest } from '@/db/repo/festivals'
+import { llmCalls } from '@/db/schema'
 import { getDefaultAvailability } from '@/db/repo/availability'
 import { fixtureClient, PERSONAS, seedCatalogFilms, seedPersona } from '@/fixtures/seed'
 import { setTransport } from '@/llm/client'
@@ -98,6 +101,22 @@ describe('curator pipeline on fixture personas (M3)', () => {
     const warm = await run(user, WEEK, 4, 3, false)
     const hit = cacheHitRate(warm.r.usage)
     expect(hit).toBeGreaterThanOrEqual(0.8)
+  }, 60_000)
+
+  it('Call B reads the prefix Call A cached, so one generation writes it only once', async () => {
+    const user = await setup('slow')
+    await run(user, WEEK, 4, 3, false) // 冷启动（画像那次调用的前缀与策展不同，不算）
+    const rows = getDb().select().from(llmCalls).where(eq(llmCalls.userId, user.id)).all()
+    const ideate = rows.filter((r) => r.purpose === 'ideate')
+    const audits = rows.filter((r) => r.purpose === 'audit')
+    expect(audits.length).toBeGreaterThan(0)
+    const prefix = ideate[0]!.cacheCreationInputTokens
+    expect(prefix).toBeGreaterThan(1000)
+    for (const a of audits) {
+      // 每次审查都读到了构思写下的整段前缀，只写自己那一小块概念
+      expect(a.cacheReadInputTokens).toBeGreaterThan(prefix * 0.9)
+      expect(a.cacheCreationInputTokens).toBeLessThan(prefix / 2)
+    }
   }, 60_000)
 
   it('replays recorded llm_calls offline and reproduces the same festival', async () => {

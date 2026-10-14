@@ -12,7 +12,7 @@ import type { z } from 'zod'
 import { outputFormat } from '@/curator/schemas'
 import { insertLlmCall } from '@/db/repo/llm'
 import type { llmCalls } from '@/db/schema'
-import { getTransport, MAX_TOKENS, MODEL } from './client'
+import { cacheControl, getTransport, llmModel, MAX_TOKENS } from './client'
 import { addUsage, cacheHitRate, costUsd, emptyTotals, type UsageTotals } from './cost'
 
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
@@ -33,6 +33,11 @@ export type CallOptions<T> = {
   schema: z.ZodType<T>
   effort: Effort
   tools?: ToolSpec
+  /**
+   * 只为缓存：结构化调用也带上与工具循环那次完全相同的工具定义（tool_choice none，不会真的调用），
+   * 让 tools → system 前缀逐字节一致，读到工具循环写下的缓存（工具定义排在缓存前缀最前面）。
+   */
+  cacheTools?: Anthropic.Tool[]
   userId?: string | null
   jobId?: string | null
   maxTokens?: number
@@ -71,7 +76,7 @@ function withMovingBreakpoint(messages: Anthropic.MessageParam[]): Anthropic.Mes
   const blocks: Anthropic.ContentBlockParam[] = typeof last.content === 'string' ? [{ type: 'text', text: last.content }] : [...last.content]
   const tail = blocks.at(-1)
   if (!tail || !('type' in tail) || !['text', 'tool_result'].includes(tail.type)) return messages
-  blocks[blocks.length - 1] = { ...tail, cache_control: { type: 'ephemeral', ttl: '1h' } } as Anthropic.ContentBlockParam
+  blocks[blocks.length - 1] = { ...tail, cache_control: cacheControl() } as Anthropic.ContentBlockParam
   return [...messages.slice(0, -1), { ...last, content: blocks }]
 }
 const TOOL_BUDGET_EXHAUSTED =
@@ -93,6 +98,7 @@ export function extractJson(text: string): unknown {
 
 export async function callStructured<T>(o: CallOptions<T>): Promise<CallResult<T>> {
   const transport = getTransport()
+  const model = llmModel()
   const usage = emptyTotals()
   const log = o.log ?? ((l: string) => console.log(l))
   const messages: Anthropic.MessageParam[] = [...o.messages]
@@ -101,19 +107,19 @@ export async function callStructured<T>(o: CallOptions<T>): Promise<CallResult<T
   const tools = o.tools?.defs
 
   const record = (res: Anthropic.Message | null, started: number, hash: string, error?: string) => {
-    if (res) addUsage(usage, MODEL, res.usage)
+    if (res) addUsage(usage, model, res.usage)
     insertLlmCall({
       userId: o.userId ?? null,
       jobId: o.jobId ?? null,
       purpose: o.purpose,
       promptVersion: o.promptVersion,
-      model: MODEL,
+      model,
       effort: o.effort,
       inputTokens: res?.usage.input_tokens ?? 0,
       cacheCreationInputTokens: res?.usage.cache_creation_input_tokens ?? 0,
       cacheReadInputTokens: res?.usage.cache_read_input_tokens ?? 0,
       outputTokens: res?.usage.output_tokens ?? 0,
-      costUsd: res ? costUsd(MODEL, res.usage) : 0,
+      costUsd: res ? costUsd(model, res.usage) : 0,
       requestHash: hash,
       response: res ? (JSON.parse(JSON.stringify(res)) as unknown) : { error },
       durationMs: Date.now() - started,
@@ -139,13 +145,14 @@ export async function callStructured<T>(o: CallOptions<T>): Promise<CallResult<T
   if (!o.tools) {
     for (let attempt = 0; attempt < 2; attempt++) {
       const params = {
-        model: MODEL,
+        model,
         max_tokens: o.maxTokens ?? MAX_TOKENS,
         system: o.system,
         messages,
         output_config: { effort: o.effort, format },
+        ...(o.cacheTools ? { tools: o.cacheTools, tool_choice: { type: 'none' as const } } : {}),
       }
-      const hash = requestHash(params.system, params.messages, null)
+      const hash = requestHash(params.system, params.messages, o.cacheTools ?? null)
       const started = Date.now()
       let res
       try {
@@ -173,7 +180,7 @@ export async function callStructured<T>(o: CallOptions<T>): Promise<CallResult<T
   let nudged = false
   for (let guard = 0; guard < maxRounds + 6; guard++) {
     const params: Anthropic.MessageCreateParamsNonStreaming = {
-      model: MODEL,
+      model,
       max_tokens: o.maxTokens ?? MAX_TOKENS,
       system: o.system,
       messages: withMovingBreakpoint(messages),
