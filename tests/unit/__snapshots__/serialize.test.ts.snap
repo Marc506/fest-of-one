@@ -1,0 +1,14 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`watch log serialization (6.3) > is byte-identical across runs and input orders 1`] = `
+"## Complete watch log (5 films)
+Format: tmdb_id|title (year)|directors|countries|rating10 (1–10, - = unrated)|flags (L liked, R rewatch, W watched more than once, D disliked ≤4)|last watched YYYY-MM. tmdb_id ? = not matched to TMDB.
+843|In the Mood for Love (2000)|Wong Kar-wai|HK,FR|10|RW|2025-01
+6977|No Country for Old Men (2007)|Joel Coen & Ethan Coen|US|9|L|2024-03
+9000900|Ghost / Remix (1990)|-|-|3|D|2021-07
+?|An Obscure Student Short (2015)|-|-|-|-|-
+?|Another Unmatched (?)|-|-|-|-|2021-02
+
+## Watchlist (0 films they have said they want to see; may be programmed, not required)
+WATCHLIST: tmdb_id|title (year)|directors"
+`;

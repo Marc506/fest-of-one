@@ -1,0 +1,1 @@
+This week there is room for only one film, so this will not be presented as a festival. Still propose 4–6 concepts covering at least 3 distinct kinds: they are your reasoning for why one particular film is the right one to watch now. Give each concept 3–5 candidates and mark exactly one of them with if_only_one = true — the film you would show if this concept won.
